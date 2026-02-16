@@ -1,0 +1,10 @@
+[Unit]
+Description=Xray Client Subscription Update
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/xray-client update
+ExecStartPost=/usr/local/bin/xray-client restart
+StandardOutput=journal
+StandardError=journal

@@ -1210,8 +1210,42 @@ CONFIG_EOF
 # 确保日志目录存在
 mkdir -p /var/log/xray
 
-# 重载 systemd
+# 安装 systemd timer（定时更新）
+echo ""
+echo -e "${YELLOW}[6/6] 安装定时更新服务...${NC}"
+
+cat > /etc/systemd/system/xray-client-update.service << 'EOF'
+[Unit]
+Description=Xray Client Subscription Update
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/xray-client update
+ExecStartPost=/usr/local/bin/xray-client restart
+StandardOutput=journal
+StandardError=journal
+EOF
+
+cat > /etc/systemd/system/xray-client-update.timer << 'EOF'
+[Unit]
+Description=Xray Client Subscription Update Timer
+Documentation=https://github.com/sivdead/xray-client
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
 systemctl daemon-reload
+systemctl enable xray-client-update.timer
+systemctl start xray-client-update.timer
+
+echo -e "${GREEN}定时更新服务已安装${NC}"
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"

@@ -284,6 +284,76 @@ rm -rf /var/log/xray-client
 rm -f /usr/local/bin/xray-client
 ```
 
+## 新增功能
+
+### 1. 定时自动更新
+安装后会自动创建 systemd timer，每天自动更新订阅：
+```bash
+# 查看定时任务状态
+systemctl status xray-client-update.timer
+
+# 手动触发更新
+systemctl start xray-client-update.service
+```
+
+### 2. Clash 订阅支持
+支持 Clash YAML 格式订阅链接，自动转换：
+```ini
+[subscription]
+url = https://example.com/clash-sub.yaml
+```
+
+### 3. 多订阅管理
+支持多个订阅源，节点自动合并：
+```ini
+[subscription]
+url = https://sub1.com/...
+url2 = https://sub2.com/...
+url3 = https://sub3.com/...
+```
+
+### 4. 节点测速 & 自动选择
+```bash
+# 测试所有节点延迟
+xray-client test
+
+# 自动选择延迟最低的节点
+xray-client auto-select
+```
+
+### 5. Web 管理界面（可选）
+```bash
+# 安装 Flask
+pip3 install flask pyyaml
+
+# 启动 Web UI
+python3 /root/xray-client/web-ui.py
+
+# 访问 http://服务器IP:5000
+```
+
+### 6. Docker 部署
+```bash
+# 构建镜像
+docker build -t xray-client .
+
+# 运行
+docker run -d \
+  -e SUB_URL=https://your-sub-url \
+  -p 10808:10808 \
+  -p 10809:10809 \
+  xray-client
+```
+
+### 7. 配置文件热重载
+```bash
+# 发送 SIGHUP 信号触发热重载（不中断连接）
+killall -HUP xray-client
+
+# 或使用命令
+xray-client reload
+```
+
 ## 目录结构
 
 ```

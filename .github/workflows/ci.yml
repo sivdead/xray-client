@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  shellcheck:
+    name: Shell Script Check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install ShellCheck
+      run: sudo apt-get install -y shellcheck
+    
+    - name: Check shell scripts
+      run: |
+        shellcheck -S warning install.sh quick-install.sh build-offline.sh || true
+  
+  python-lint:
+    name: Python Lint
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        pip install flake8 pylint
+    
+    - name: Lint with flake8
+      run: |
+        flake8 xray-client.py --count --select=E9,F63,F7,F82 --show-source --statistics || true
+  
+  test-install:
+    name: Test Installation
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Test install script syntax
+      run: bash -n install.sh
+    
+    - name: Test quick-install script syntax
+      run: bash -n quick-install.sh

@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-offline-package:
+    name: Build Offline Package
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Get Xray Latest Version
+      id: get_version
+      run: |
+        latest=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        echo "version=$latest" >> $GITHUB_OUTPUT
+        echo "Xray Latest Version: $latest"
+    
+    - name: Download Xray
+      run: |
+        VERSION=${{ steps.get_version.outputs.version }}
+        mkdir -p offline-package
+        
+        # Download multiple architectures
+        for arch in Xray-linux-64 Xray-linux-arm64-v8a; do
+          echo "Downloading $arch..."
+          curl -fsSL -o "offline-package/${arch}.zip" \
+            "https://github.com/XTLS/Xray-core/releases/download/${VERSION}/${arch}.zip" || \
+          curl -fsSL -o "offline-package/${arch}.zip" \
+            "https://ghproxy.com/https://github.com/XTLS/Xray-core/releases/download/${VERSION}/${arch}.zip"
+        done
+    
+    - name: Download GeoData
+      run: |
+        mkdir -p offline-package
+        curl -fsSL -o offline-package/geoip.dat \
+          https://github.com/v2fly/geoip/releases/latest/download/geoip.dat || \
+        curl -fsSL -o offline-package/geoip.dat \
+          https://ghproxy.com/https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
+        
+        curl -fsSL -o offline-package/geosite.dat \
+          https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat || \
+        curl -fsSL -o offline-package/geosite.dat \
+          https://ghproxy.com/https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
+    
+    - name: Prepare Offline Package
+      run: |
+        mkdir -p xray-client-offline
+        
+        # Copy scripts
+        cp install.sh xray-client-offline/
+        cp quick-install.sh xray-client-offline/
+        cp xray-client.py xray-client-offline/
+        cp README.md xray-client-offline/
+        cp LICENSE xray-client-offline/
+        
+        # Copy Xray (x64 as default)
+        unzip -q offline-package/Xray-linux-64.zip -d temp_xray
+        cp temp_xray/xray xray-client-offline/xray-bin
+        rm -rf temp_xray
+        
+        # Copy geodata
+        cp offline-package/geoip.dat xray-client-offline/
+        cp offline-package/geosite.dat xray-client-offline/
+        
+        # Create install-offline.sh
+        cat > xray-client-offline/install-offline.sh << 'EOF'
+#!/bin/bash
+set -e
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+echo -e "${YELLOW}Xray Client 离线安装${NC}"
+echo ""
+
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}请使用 root 权限运行此脚本${NC}"
+    exit 1
+fi
+
+if [ ! -f "xray-bin" ]; then
+    echo -e "${RED}错误: 未找到 xray-bin 文件${NC}"
+    exit 1
+fi
+
+# 复制 Xray 到临时目录
+cp xray-bin /tmp/xray
+chmod +x /tmp/xray
+
+# 运行安装脚本，选择离线模式
+export NETWORK_MODE="offline"
+bash install.sh
+
+echo ""
+echo -e "${GREEN}安装完成!${NC}"
+echo ""
+EOF
+        chmod +x xray-client-offline/install-offline.sh
+        
+        # Create README for offline package
+        cat > xray-client-offline/README.txt << EOF
+Xray Client 离线安装包
+========================
+
+版本: ${{ github.ref_name }}
+Xray 版本: ${{ steps.get_version.outputs.version }}
+架构: x86_64
+
+安装方法:
+  sudo ./install-offline.sh
+
+更多说明见 README.md
+EOF
+        
+        # Create archive
+        tar czf xray-client-offline.tar.gz xray-client-offline/
+        
+        echo "Offline package created:"
+        ls -lh xray-client-offline.tar.gz
+    
+    - name: Upload to Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: xray-client-offline.tar.gz
+        body: |
+          ## Xray Client ${{ github.ref_name }}
+          
+          ### 离线安装包
+          下载 `xray-client-offline.tar.gz` 可在无法连接 GitHub 的服务器上安装。
+          
+          ### 快速安装
+          ```bash
+          curl -fsSL -o install.sh https://cdn.jsdelivr.net/gh/sivdead/xray-client@${{ github.ref_name }}/install.sh
+          sudo bash install.sh
+          ```
+          
+          ### 更新日志
+          见 [CHANGELOG.md](CHANGELOG.md)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
