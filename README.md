@@ -1,434 +1,411 @@
-# Xray Client for TencentOS / CentOS
+# Xray Client for Linux
 
-一个支持 JustMySocks 订阅链接的 Xray 客户端，适用于腾讯云 TencentOS、CentOS、RHEL 等 Linux 系统。
+A lightweight Xray client with JustMySocks subscription support for TencentOS, CentOS, RHEL, Ubuntu, and Debian.
 
-**特点**: 
-- 复用 Xray 官方 [install-release.sh](https://github.com/XTLS/Xray-install) 安装核心
-- **智能网络适配**：自动检测网络环境，支持直连/镜像/代理/离线多种安装方式
+**Key Features**:
+- Smart network adaptation (auto-detects and uses mirrors in China)
+- Multi-protocol support: VMess, VLESS, Shadowsocks, Trojan
+- Clash subscription format support
+- Auto node selection based on latency
+- Web UI for easy management
+- Docker support
+- Systemd integration
 
-## 功能特性
+## 📑 Table of Contents
 
-- ✅ 智能网络适配，支持中国大陆网络环境
-- ✅ 复用 Xray 官方安装脚本，规范安装 Xray 核心
-- ✅ 支持 JustMySocks 订阅链接自动更新
-- ✅ 支持 VMess、VLESS、Shadowsocks、Trojan 协议
-- ✅ 自动解析订阅内容并生成 Xray 配置
-- ✅ 使用官方 Systemd 服务管理
-- ✅ 多节点切换
-- ✅ 本地 SOCKS5 + HTTP 双代理
+- [Features](#features)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Web UI](#web-ui)
+- [Docker](#docker)
+- [Proxy Settings](#proxy-settings)
+- [Troubleshooting](#troubleshooting)
+- [Uninstall](#uninstall)
 
-## 系统要求
+## ✨ Features
 
-- TencentOS Server 2/3
-- CentOS 7/8/9
-- RHEL 7/8/9
-- AlmaLinux / Rocky Linux
-- Ubuntu / Debian
+- ✅ **Smart Network Adaptation** - Auto-detects network environment, supports direct connection, mirrors, proxy, and offline installation
+- ✅ **Official Xray Installation** - Uses official install-release.sh for standardized installation
+- ✅ **JustMySocks Subscription** - Auto-updates subscription links
+- ✅ **Multi-Protocol Support** - VMess, VLESS, Shadowsocks, Trojan
+- ✅ **Clash Format** - Supports Clash YAML subscription format
+- ✅ **Web Management UI** - Browser-based node management
+- ✅ **Auto Node Selection** - Tests latency and auto-selects best node
+- ✅ **Scheduled Updates** - Systemd timer for daily subscription updates
+- ✅ **Hot Reload** - Reload config without restarting service
+- ✅ **Docker Support** - Official Docker image available
 
-需要 root 权限运行安装脚本。
+## 📋 Requirements
 
-## 快速开始
+- Linux with systemd (TencentOS, CentOS 7/8/9, RHEL, Ubuntu, Debian)
+- Root access
+- Python 3.6+ (will be auto-installed)
 
-### 方式一：自动安装（推荐，有基本网络访问）
+## 🚀 Quick Start
 
 ```bash
-# 下载安装脚本（使用 jsdelivr CDN）
-curl -fsSL -o install.sh https://cdn.jsdelivr.net/gh/your-repo/xray-client@main/install.sh
+# Download and install (using jsDelivr CDN for China)
+curl -fsSL -o install.sh https://cdn.jsdelivr.net/gh/sivdead/xray-client@master/install.sh
+sudo bash install.sh
 
-# 或从 Gitee 下载（国内更快）
-curl -fsSL -o install.sh https://gitee.com/your-repo/xray-client/raw/main/install.sh
+# Configure subscription
+sudo vi /etc/xray-client/config.ini
+# Edit: url = https://your-subscription-link
 
-# 执行安装
-chmod +x install.sh
-sudo ./install.sh
+# Update subscription and start
+sudo xray-client update
+sudo xray-client restart
+
+# Test connection
+export https_proxy=http://127.0.0.1:10809
+curl https://www.google.com
 ```
 
-脚本会自动：
-1. 检测 GitHub 连通性
-2. 如无法直连，自动寻找可用镜像源
-3. 使用最佳方式下载并安装 Xray
+## 📦 Installation
 
-### 方式二：交互式快速安装
+### Method 1: Online Installation (Recommended)
 
 ```bash
-curl -fsSL -o quick-install.sh https://cdn.jsdelivr.net/gh/your-repo/xray-client@main/quick-install.sh
-chmod +x quick-install.sh
-sudo ./quick-install.sh
+# Using jsDelivr CDN (faster in China)
+curl -fsSL -o install.sh https://cdn.jsdelivr.net/gh/sivdead/xray-client@master/install.sh
+sudo bash install.sh
+
+# Or using GitHub directly
+curl -fsSL -o install.sh https://raw.githubusercontent.com/sivdead/xray-client/master/install.sh
+sudo bash install.sh
 ```
 
-### 方式三：离线安装（服务器完全无法外网）
+The installer will:
+1. Detect your network environment
+2. Install Xray core using official script
+3. Install Python dependencies
+4. Set up systemd services
+5. Configure auto-update timer
 
-在可以访问 GitHub 的机器上：
+### Method 2: Interactive Quick Install
 
 ```bash
-# 下载构建脚本
-curl -fsSL -o build-offline.sh https://cdn.jsdelivr.net/gh/your-repo/xray-client@main/build-offline.sh
-chmod +x build-offline.sh
+curl -fsSL -o quick-install.sh https://cdn.jsdelivr.net/gh/sivdead/xray-client@master/quick-install.sh
+sudo bash quick-install.sh
+```
 
-# 构建离线包
+This will prompt you for subscription URL and ports.
+
+### Method 3: Offline Installation
+
+For servers without internet access:
+
+```bash
+# On a machine with internet access
 ./build-offline.sh
+# This creates: xray-client-offline-202xxxxx.tar.gz
 
-# 生成的文件: xray-client-offline-202xxxxx.tar.gz
-```
-
-然后将离线包上传到服务器：
-
-```bash
-# 在服务器上
+# Copy to target server and install
 tar xzf xray-client-offline-202xxxxx.tar.gz
 cd xray-client-offline-202xxxxx
 sudo ./install-offline.sh
 ```
 
-### 方式四：手动下载 Xray 后安装
+## ⚙️ Configuration
 
-如果服务器能访问部分网络但无法访问 GitHub：
-
-```bash
-# 手动下载 Xray 二进制（在本地机器上）
-# 从 https://github.com/XTLS/Xray-core/releases 下载对应架构的文件
-# 上传到服务器的 /tmp/xray
-
-# 然后在服务器上运行安装脚本，选择离线模式
-chmod +x install.sh
-sudo ./install.sh
-# 按提示选择 "1) 离线安装"
-```
-
-## 配置使用
-
-### 1. 编辑配置文件
-
-```bash
-vi /etc/xray-client/config.ini
-```
+Edit `/etc/xray-client/config.ini`:
 
 ```ini
 [subscription]
-url = https://justmysocks.net/members/getsub.php?service=xxx&id=xxx-xxx-xxx
+# Your subscription URL (required)
+url = https://justmysocks.net/members/getsub.php?service=xxx&id=xxx
+
+# For multiple subscriptions
+url2 = https://example.com/sub2
+url3 = https://example.com/sub3
+
+# Auto-update interval (seconds), default 1 hour
+interval = 3600
 
 [local]
+# Local SOCKS5 proxy port
 socks_port = 10808
+
+# Local HTTP proxy port
 http_port = 10809
 
+# Enable UDP
+udp = true
+
+# Enable hot reload
+hot_reload = true
+
 [node]
+# Default selected node index
 selected = 0
 ```
 
-### 2. 更新订阅并启动
+## 🎮 Usage
+
+### Basic Commands
 
 ```bash
-# 更新订阅
-xray-client update
+# Update subscription
+sudo xray-client update
 
-# 启动服务
-xray-client restart
+# List all nodes
+sudo xray-client list
 
-# 查看状态
-xray-client status
+# Select a node (by index)
+sudo xray-client select -i 2
+
+# Test node latency
+sudo xray-client test
+
+# Auto-select best node
+sudo xray-client auto-select
+
+# Apply config and restart
+sudo xray-client restart
+
+# Hot reload (no connection drop)
+sudo xray-client reload
+
+# Check status
+sudo xray-client status
+
+# Test proxy connection
+sudo xray-client ping
 ```
 
-### 3. 使用代理
+### Service Control
 
 ```bash
-# 设置 HTTP 代理
+# Start/Stop/Restart
+sudo systemctl start xray
+sudo systemctl stop xray
+sudo systemctl restart xray
+
+# Check status
+sudo systemctl status xray
+
+# View logs
+sudo journalctl -u xray -f
+sudo tail -f /var/log/xray/error.log
+```
+
+## 🌐 Web UI
+
+Optional web interface for browser-based management:
+
+```bash
+# Install Flask
+sudo pip3 install flask pyyaml
+
+# Start Web UI
+cd /root/xray-client
+sudo python3 web-ui.py
+
+# Access via browser
+# http://your-server-ip:5000
+```
+
+Features:
+- View all nodes
+- Switch nodes with one click
+- Update subscription
+- View service status
+
+## 🐳 Docker
+
+### Using Docker
+
+```bash
+# Run with subscription URL
+docker run -d \
+  --name xray-client \
+  -e SUB_URL=https://your-subscription-url \
+  -p 10808:10808 \
+  -p 10809:10809 \
+  sivdead/xray-client
+
+# With Web UI enabled
+docker run -d \
+  --name xray-client \
+  -e SUB_URL=https://your-subscription-url \
+  -e WEB_UI=true \
+  -p 10808:10808 \
+  -p 10809:10809 \
+  -p 5000:5000 \
+  sivdead/xray-client
+```
+
+### Build Your Own Image
+
+```bash
+git clone https://github.com/sivdead/xray-client.git
+cd xray-client
+docker build -t xray-client .
+docker run -d -e SUB_URL=xxx -p 10808:10808 -p 10809:10809 xray-client
+```
+
+## 🔧 Proxy Settings
+
+After installation, configure system-wide proxy:
+
+### Current Session
+
+```bash
+# Enable proxy
 export http_proxy=http://127.0.0.1:10809
 export https_proxy=http://127.0.0.1:10809
+export no_proxy=localhost,127.0.0.1
 
-# 测试
-curl https://www.google.com
+# Or use the helper
+source proxy-on
 ```
 
-## 命令行工具
+### Permanent (All Users)
 
+Already configured in `/etc/profile.d/proxy.sh`, takes effect on next login.
+
+### Application-Specific
+
+**wget:**
 ```bash
-# 更新订阅
-xray-client update
-
-# 列出节点
-xray-client list
-
-# 切换节点（索引从0开始）
-xray-client select -i 2
-
-# 启动/停止/重启/查看状态
-xray-client start
-xray-client stop
-xray-client restart
-xray-client status
-
-# 测试代理连接
-xray-client test
+wget -e use_proxy=yes -e http_proxy=127.0.0.1:10809 https://example.com
 ```
 
-## 网络适配说明
-
-安装脚本内置多种网络适配策略：
-
-### 1. 自动检测
-脚本首先检测 GitHub 连通性：
-- ✅ 如可直连，直接使用官方脚本安装
-- ❌ 如不可直连，自动尝试镜像源
-
-### 2. 内置镜像源（按速度排序）
-- `https://ghfast.top/`
-- `https://ghproxy.com/`
-- `https://mirror.ghproxy.com/`
-- `https://gh.api.99988866.xyz/`
-- `https://ghps.cc/`
-
-### 3. 离线模式
-如果所有镜像都不可用，脚本会提示：
-- 使用本地预下载的 Xray 二进制
-- 或设置 HTTP 代理后重试
-
-## 为其他程序配置代理
-
-### Docker
-
+**curl:**
 ```bash
-mkdir -p /etc/systemd/system/docker.service.d
-cat > /etc/systemd/system/docker.service.d/http-proxy.conf << EOF
-[Service]
-Environment="HTTP_PROXY=http://127.0.0.1:10809"
-Environment="HTTPS_PROXY=http://127.0.0.1:10809"
-Environment="NO_PROXY=localhost,127.0.0.1,.tencentyun.com,.myqcloud.com"
-EOF
-systemctl daemon-reload
-systemctl restart docker
+curl -x http://127.0.0.1:10809 https://example.com
 ```
 
-### Git
+**yum/dnf:**
+Already configured in `/etc/yum.conf`
 
+**Docker:**
+Not configured by default (most Docker use cases don't need proxy)
+
+**Git:**
 ```bash
 git config --global http.proxy http://127.0.0.1:10809
 git config --global https.proxy http://127.0.0.1:10809
 ```
 
-### yum/dnf
+## 🔍 Troubleshooting
+
+### Service Won't Start
 
 ```bash
-# 在 /etc/yum.conf 末尾添加
-proxy=http://127.0.0.1:10809
+# Check logs
+sudo journalctl -u xray -n 50
+
+# Verify config
+sudo /usr/local/bin/xray -test -c /usr/local/etc/xray/config.json
+
+# Check ports
+sudo ss -tlnp | grep 1080
 ```
 
-## 日志查看
+### Subscription Update Fails
 
 ```bash
-# Xray 日志
-tail -f /var/log/xray/error.log
-tail -f /var/log/xray/access.log
+# Test subscription URL manually
+curl -v "your-subscription-url"
 
-# 客户端日志
-tail -f /var/log/xray-client/client.log
-
-# Systemd 服务日志
-journalctl -u xray -f
+# Update with proxy
+export https_proxy=http://127.0.0.1:10809
+sudo xray-client update
 ```
 
-## 配置文件说明
-
-### 客户端配置 `/etc/xray-client/config.ini`
-
-```ini
-[subscription]
-# JustMySocks 订阅链接（必需）
-url = https://justmysocks.net/members/getsub.php?...
-
-# 自动更新间隔（秒），默认 3600（1小时）
-interval = 3600
-
-[local]
-# 本地 SOCKS5 代理端口
-socks_port = 10808
-
-# 本地 HTTP 代理端口
-http_port = 10809
-
-[node]
-# 默认选择的节点索引
-selected = 0
-```
-
-### Xray 配置 `/usr/local/etc/xray/config.json`
-
-由 `xray-client` 自动生成，**不要手动修改**。
-
-## 局域网访问
-
-默认只监听 127.0.0.1，如需让局域网其他设备使用，修改配置并开放防火墙：
+### Can't Connect to Proxy
 
 ```bash
-# 编辑生成的 Xray 配置文件
-vi /usr/local/etc/xray/config.json
+# Check if Xray is running
+sudo systemctl is-active xray
 
-# 将 "listen": "127.0.0.1" 改为 "listen": "0.0.0.0"
+# Test local connection
+curl -x http://127.0.0.1:10809 https://www.google.com
 
-# 开放防火墙
-firewall-cmd --permanent --add-port=10808/tcp
-firewall-cmd --permanent --add-port=10809/tcp
-firewall-cmd --reload
+# Check firewall
+sudo firewall-cmd --list-ports
 ```
 
-同时在腾讯云控制台放通对应端口的安全组规则。
-
-## 卸载
+### Some Nodes Don't Work
 
 ```bash
-# 使用官方脚本卸载 Xray
+# Test all nodes and switch to best
+sudo xray-client auto-select
+
+# Or manually test and switch
+sudo xray-client test
+sudo xray-client select -i 3
+sudo xray-client restart
+```
+
+## ❌ Uninstall
+
+```bash
+# Remove Xray using official script
 bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh) remove
 
-# 删除客户端配置
-rm -rf /etc/xray-client
-rm -rf /var/log/xray-client
-rm -f /usr/local/bin/xray-client
+# Remove client config
+sudo rm -rf /etc/xray-client
+sudo rm -rf /var/log/xray-client
+sudo rm -f /usr/local/bin/xray-client
+sudo rm -f /etc/profile.d/proxy.sh
+
+# Remove systemd timer
+sudo systemctl stop xray-client-update.timer
+sudo systemctl disable xray-client-update.timer
+sudo rm -f /etc/systemd/system/xray-client-update.*
+sudo systemctl daemon-reload
 ```
 
-## 新增功能
+## 📊 Protocol Support
 
-### 1. 定时自动更新
-安装后会自动创建 systemd timer，每天自动更新订阅：
-```bash
-# 查看定时任务状态
-systemctl status xray-client-update.timer
+| Protocol | Support | Notes |
+|----------|---------|-------|
+| VMess | ✅ Full | Includes WebSocket + TLS |
+| VLESS | ✅ Full | Supports XTLS, REALITY |
+| Shadowsocks | ✅ Full | AEAD ciphers |
+| Trojan | ✅ Full | TLS transport |
 
-# 手动触发更新
-systemctl start xray-client-update.service
-```
-
-### 2. Clash 订阅支持
-支持 Clash YAML 格式订阅链接，自动转换：
-```ini
-[subscription]
-url = https://example.com/clash-sub.yaml
-```
-
-### 3. 多订阅管理
-支持多个订阅源，节点自动合并：
-```ini
-[subscription]
-url = https://sub1.com/...
-url2 = https://sub2.com/...
-url3 = https://sub3.com/...
-```
-
-### 4. 节点测速 & 自动选择
-```bash
-# 测试所有节点延迟
-xray-client test
-
-# 自动选择延迟最低的节点
-xray-client auto-select
-```
-
-### 5. Web 管理界面（可选）
-```bash
-# 安装 Flask
-pip3 install flask pyyaml
-
-# 启动 Web UI
-python3 /root/xray-client/web-ui.py
-
-# 访问 http://服务器IP:5000
-```
-
-### 6. Docker 部署
-```bash
-# 构建镜像
-docker build -t xray-client .
-
-# 运行
-docker run -d \
-  -e SUB_URL=https://your-sub-url \
-  -p 10808:10808 \
-  -p 10809:10809 \
-  xray-client
-```
-
-### 7. 配置文件热重载
-```bash
-# 发送 SIGHUP 信号触发热重载（不中断连接）
-killall -HUP xray-client
-
-# 或使用命令
-xray-client reload
-```
-
-## 目录结构
+## 📝 Directory Structure
 
 ```
-/usr/local/bin/xray              # Xray 核心（官方）
-/usr/local/etc/xray/config.json  # Xray 配置（自动生成）
-/usr/local/share/xray/           # GeoIP/GeoSite 数据
-/etc/systemd/system/xray.service # Systemd 服务（官方）
-/var/log/xray/                   # Xray 日志目录
+/usr/local/bin/xray              # Xray core (official)
+/usr/local/etc/xray/config.json  # Xray config (auto-generated)
+/usr/local/share/xray/           # GeoIP/GeoSite data
+/etc/systemd/system/xray.service # Xray service (official)
+/var/log/xray/                   # Xray logs
 
-/etc/xray-client/                # 客户端配置
-├── config.ini
+/etc/xray-client/                # Client config
+├── config.ini                   # Main configuration
 └── subscription/
-    └── nodes.json
+    └── nodes.json               # Cached nodes
 
-/var/log/xray-client/            # 客户端日志
+/var/log/xray-client/            # Client logs
 └── client.log
 
-/usr/local/bin/xray-client       # 管理脚本
+/usr/local/bin/xray-client       # Management script
 ```
 
-## 常见问题
+## 🤝 Contributing
 
-### Q: 安装时提示 "无法连接 GitHub"
+Pull requests are welcome! For major changes, please open an issue first.
 
-A: 脚本会自动尝试镜像源。如所有镜像都失败，请选择：
-1. 离线安装 - 手动下载 Xray 到 /tmp/xray
-2. 代理安装 - 设置 HTTP 代理
+## 📄 License
 
-### Q: 订阅更新失败
+[MIT](LICENSE)
 
-A: 
-```bash
-# 检查订阅链接是否有效
-curl -v "你的订阅链接"
-
-# 设置代理后更新
-export https_proxy=http://127.0.0.1:10809
-xray-client update
-```
-
-### Q: 某些节点连不上
-
-```bash
-# 列出所有节点
-xray-client list
-
-# 尝试其他节点
-xray-client select -i 1
-xray-client restart
-```
-
-### Q: 如何升级 Xray
-
-```bash
-# 使用官方脚本（需能访问 GitHub 或设置代理）
-bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh) install
-
-# 或使用离线包重新安装
-```
-
-## 协议支持
-
-| 协议 | 支持情况 | 说明 |
-|------|---------|------|
-| VMess | ✅ 完全支持 | 包括 WebSocket + TLS |
-| VLESS | ✅ 完全支持 | 支持 XTLS、REALITY |
-| Shadowsocks | ✅ 完全支持 | AEAD 加密 |
-| Trojan | ✅ 完全支持 | TLS 传输 |
-
-## 相关链接
+## 🔗 Links
 
 - [Xray-core](https://github.com/XTLS/Xray-core)
-- [Xray-install](https://github.com/XTLS/Xray-install) - 官方安装脚本
+- [Xray-install](https://github.com/XTLS/Xray-install) - Official install script
 - [JustMySocks](https://justmysocks.net/)
 
-## 许可证
+---
 
-MIT License
+## 🇨🇳 中文版
+
+For Chinese documentation, see [README_CN.md](README_CN.md).
