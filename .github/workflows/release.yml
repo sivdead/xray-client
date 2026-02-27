@@ -4,13 +4,36 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (如 v1.0.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
+env:
+  RELEASE_VERSION: ${{ github.event.inputs.version || github.ref_name }}
+
 jobs:
+  create-tag:
+    name: Create Tag (manual trigger)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Create and push tag
+      run: |
+        git tag "${{ github.event.inputs.version }}"
+        git push origin "${{ github.event.inputs.version }}"
+
   build-executables:
     name: Build Executables (${{ matrix.arch }})
+    needs: [create-tag]
+    if: always() && (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -195,7 +218,7 @@ jobs:
         Xray Client 离线安装包
         ========================
 
-        版本: ${{ github.ref_name }}
+        版本: ${{ env.RELEASE_VERSION }}
         Xray 版本: ${{ steps.get_version.outputs.version }}
         架构: x86_64
         包含预编译可执行文件（无需 Python 环境）
@@ -276,7 +299,7 @@ jobs:
         Xray Client 离线安装包
         ========================
 
-        版本: ${{ github.ref_name }}
+        版本: ${{ env.RELEASE_VERSION }}
         Xray 版本: ${{ steps.get_version.outputs.version }}
         架构: aarch64
         包含预编译可执行文件（无需 Python 环境）
@@ -309,8 +332,9 @@ jobs:
 
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
       with:
+        tag_name: ${{ env.RELEASE_VERSION }}
         files: |
           xray-client-offline-x86_64.tar.gz
           xray-client-offline-aarch64.tar.gz
@@ -319,7 +343,7 @@ jobs:
           xray-client-aarch64
           xray-webui-aarch64
         body: |
-          ## Xray Client ${{ github.ref_name }}
+          ## Xray Client ${{ env.RELEASE_VERSION }}
 
           ### 独立可执行文件（推荐）
           下载对应架构的 `xray-client` 和 `xray-webui` 可直接运行，无需安装 Python 环境。
@@ -334,7 +358,7 @@ jobs:
 
           ### 快速安装
           ```bash
-          curl -fsSL -o install.sh https://cdn.jsdelivr.net/gh/sivdead/xray-client@${{ github.ref_name }}/install.sh
+          curl -fsSL -o install.sh https://cdn.jsdelivr.net/gh/sivdead/xray-client@${{ env.RELEASE_VERSION }}/install.sh
           sudo bash install.sh
           ```
 
