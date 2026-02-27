@@ -24,13 +24,17 @@ from configparser import ConfigParser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 配置日志
+_log_handlers = [logging.StreamHandler()]
+_log_file = '/var/log/xray-client/client.log'
+try:
+    os.makedirs(os.path.dirname(_log_file), exist_ok=True)
+    _log_handlers.append(logging.FileHandler(_log_file, encoding='utf-8'))
+except OSError:
+    pass  # 非 root 用户无法写日志文件，仅输出到终端
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('/var/log/xray-client/client.log', encoding='utf-8')
-    ]
+    handlers=_log_handlers
 )
 logger = logging.getLogger(__name__)
 
@@ -62,13 +66,19 @@ class XrayClient:
         self.enable_udp = True
         self.github_mirror = ""
         self.hot_reload = True  # 启用热重载
-        
+        self._network_detected = False
+
         self.load_config()
-        self.detect_network()
-        
+
         # 注册信号处理（热重载）
         if self.hot_reload:
             signal.signal(signal.SIGHUP, self.handle_reload)
+
+    def ensure_network_detected(self):
+        """按需检测网络，避免本地命令也触发网络探测"""
+        if not self._network_detected:
+            self.detect_network()
+            self._network_detected = True
     
     def handle_reload(self, signum, frame):
         """处理 SIGHUP 信号，热重载配置"""
@@ -79,8 +89,8 @@ class XrayClient:
             try:
                 subprocess.run(['killall', '-USR1', 'xray'], check=False)
                 logger.info("Xray 热重载完成")
-            except:
-                logger.warning("热重载失败，尝试正常重启...")
+            except Exception as e:
+                logger.warning(f"热重载失败，尝试正常重启: {e}")
                 self.restart_xray()
     
     def detect_network(self):
@@ -95,9 +105,9 @@ class XrayClient:
             self.github_mirror = ""
             logger.info("GitHub 可直连")
             return
-        except:
+        except Exception:
             pass
-        
+
         # 尝试镜像
         for mirror in GH_MIRRORS[:-1]:
             try:
@@ -107,7 +117,7 @@ class XrayClient:
                 self.github_mirror = mirror
                 logger.info(f"使用 GitHub 镜像: {mirror}")
                 return
-            except:
+            except Exception:
                 continue
         
         logger.warning("无法连接 GitHub 及镜像，在线功能将不可用")
@@ -164,6 +174,7 @@ class XrayClient:
     
     def fetch_subscription(self, url):
         """获取订阅链接内容"""
+        self.ensure_network_detected()
         if not url:
             logger.error("订阅链接为空")
             return None
@@ -180,7 +191,7 @@ class XrayClient:
                 
                 try:
                     text = content.decode('utf-8')
-                except:
+                except UnicodeDecodeError:
                     text = content.decode('utf-8', errors='ignore')
                 
                 return text
@@ -196,7 +207,7 @@ class XrayClient:
             if padding != 4:
                 text += '=' * padding
             return base64.b64decode(text).decode('utf-8', errors='ignore')
-        except:
+        except Exception:
             return None
     
     def parse_vmess(self, url):
@@ -1039,8 +1050,8 @@ def main():
         client.test_all_nodes()
     
     elif args.command == 'auto-select':
-        client.auto_select_best_node()
-        client.apply_config()
+        if client.auto_select_best_node():
+            client.restart_xray()
     
     elif args.command == 'apply':
         client.generate_config()

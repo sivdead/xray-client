@@ -9,7 +9,7 @@ import sys
 import json
 import subprocess
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request, redirect
+from flask import Flask, render_template_string, jsonify, request
 
 app = Flask(__name__)
 
@@ -18,6 +18,25 @@ CLIENT_CONFIG_DIR = '/etc/xray-client'
 SUBSCRIPTION_FILE = os.path.join(CLIENT_CONFIG_DIR, 'subscription', 'nodes.json')
 INI_FILE = os.path.join(CLIENT_CONFIG_DIR, 'config.ini')
 
+# 基本认证 token（通过环境变量设置，未设置则不启用认证）
+AUTH_TOKEN = os.environ.get('WEB_UI_TOKEN', '')
+
+
+def check_auth():
+    """检查请求认证"""
+    if not AUTH_TOKEN:
+        return True  # 未配置 token 则不启用认证
+    token = request.args.get('token') or request.headers.get('X-Auth-Token', '')
+    return token == AUTH_TOKEN
+
+
+@app.before_request
+def auth_guard():
+    """全局认证守卫"""
+    if not check_auth():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+
 def load_nodes():
     """加载节点数据"""
     if os.path.exists(SUBSCRIPTION_FILE):
@@ -25,56 +44,53 @@ def load_nodes():
             return json.load(f)
     return {'nodes': [], 'update_time': '从未'}
 
-def load_config():
-    """加载配置"""
-    if os.path.exists(INI_FILE):
-        with open(INI_FILE, 'r', encoding='utf-8') as f:
-            return f.read()
-    return ''
 
-@app.route('/')
-def index():
-    """主页"""
-    data = load_nodes()
-    
-    # 获取 Xray 状态
-    status = '未知'
+def get_xray_status():
+    """获取 Xray 服务状态"""
     try:
         result = subprocess.run(
             ['systemctl', 'is-active', 'xray'],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
         )
-        status = result.stdout.strip()
-    except:
-        pass
-    
-    return render_template('index.html', 
-                         nodes=data.get('nodes', []),
-                         update_time=data.get('update_time', '从未'),
-                         count=len(data.get('nodes', [])),
-                         status=status)
+        return result.stdout.strip()
+    except Exception:
+        return '未知'
+
+
+@app.route('/')
+def index():
+    """主页"""
+    data = load_nodes()
+    status = get_xray_status()
+
+    return render_template_string(
+        HTML_TEMPLATE,
+        nodes=data.get('nodes', []),
+        update_time=data.get('update_time', '从未'),
+        count=len(data.get('nodes', [])),
+        status=status
+    )
+
 
 @app.route('/api/nodes')
 def api_nodes():
     """API: 获取节点列表"""
     return jsonify(load_nodes())
 
+
 @app.route('/api/status')
 def api_status():
     """API: 获取 Xray 状态"""
-    try:
-        result = subprocess.run(
-            ['systemctl', 'is-active', 'xray'],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
-        )
-        return jsonify({'status': result.stdout.strip()})
-    except Exception as e:
-        return jsonify({'status': 'error', 'error': str(e)})
+    return jsonify({'status': get_xray_status()})
+
 
 @app.route('/api/select', methods=['POST'])
 def api_select():
     """API: 选择节点"""
-    index = request.json.get('index', 0)
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    if not isinstance(index, int) or index < 0:
+        return jsonify({'success': False, 'error': '无效的节点索引'}), 400
     try:
         result = subprocess.run(
             ['xray-client', 'select', '-i', str(index)],
@@ -84,6 +100,7 @@ def api_select():
         return jsonify({'success': True, 'output': result.stdout})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
 
 @app.route('/api/update', methods=['POST'])
 def api_update():
@@ -99,6 +116,7 @@ def api_update():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+
 @app.route('/api/restart', methods=['POST'])
 def api_restart():
     """API: 重启 Xray"""
@@ -108,17 +126,6 @@ def api_restart():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-# 创建模板目录和文件
-@app.before_first_request
-def create_templates():
-    """创建模板文件"""
-    template_dir = os.path.join(os.path.dirname(__file__), 'templates')
-    os.makedirs(template_dir, exist_ok=True)
-    
-    template_path = os.path.join(template_dir, 'index.html')
-    if not os.path.exists(template_path):
-        with open(template_path, 'w', encoding='utf-8') as f:
-            f.write(HTML_TEMPLATE)
 
 HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -227,8 +234,8 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <h1>🔌 Xray Client Web UI</h1>
-        
+        <h1>Xray Client Web UI</h1>
+
         <div class="status-bar">
             <div>
                 <strong>服务状态:</strong>
@@ -240,11 +247,11 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 </span>
             </div>
             <div class="controls">
-                <button class="btn-primary" onclick="updateSub()">🔄 更新订阅</button>
-                <button class="btn-success" onclick="restartService()">🔄 重启服务</button>
+                <button class="btn-primary" onclick="updateSub()">更新订阅</button>
+                <button class="btn-success" onclick="restartService()">重启服务</button>
             </div>
         </div>
-        
+
         <div class="node-list">
             {% for node in nodes %}
             <div class="node-item" data-index="{{ loop.index0 }}">
@@ -268,9 +275,9 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             {% endfor %}
         </div>
     </div>
-    
+
     <div id="message" class="message"></div>
-    
+
     <script>
         function showMessage(text, isError = false) {
             const msg = document.getElementById('message');
@@ -279,7 +286,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             msg.style.display = 'block';
             setTimeout(() => msg.style.display = 'none', 3000);
         }
-        
+
         async function selectNode(index) {
             try {
                 const res = await fetch('/api/select', {
@@ -299,7 +306,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 showMessage('请求失败', true);
             }
         }
-        
+
         async function updateSub() {
             showMessage('正在更新订阅...');
             try {
@@ -315,7 +322,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 showMessage('请求失败', true);
             }
         }
-        
+
         async function restartService() {
             showMessage('正在重启服务...');
             try {
@@ -330,13 +337,17 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 showMessage('请求失败', true);
             }
         }
-        
-        // 刷新状态
+
+        // 定时刷新状态
         setInterval(async () => {
             try {
                 const res = await fetch('/api/status');
                 const data = await res.json();
-                // 可以在这里更新状态显示
+                const badge = document.querySelector('.status-badge');
+                if (badge) {
+                    badge.className = 'status-badge status-' + (data.status === 'active' ? 'active' : 'inactive');
+                    badge.textContent = data.status === 'active' ? '运行中' : '已停止';
+                }
             } catch (e) {}
         }, 5000);
     </script>
@@ -345,5 +356,9 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 '''
 
 if __name__ == '__main__':
-    print("Starting Xray Client Web UI on http://0.0.0.0:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    port = int(os.environ.get('WEB_UI_PORT', 5000))
+    bind = os.environ.get('WEB_UI_BIND', '127.0.0.1')
+    if AUTH_TOKEN:
+        print(f"Auth enabled. Use ?token=<TOKEN> or X-Auth-Token header.")
+    print(f"Starting Xray Client Web UI on http://{bind}:{port}")
+    app.run(host=bind, port=port, debug=False)
