@@ -97,7 +97,8 @@ download_file() {
     fi
     
     # 尝试镜像
-    local mirror=$(get_working_mirror)
+    local mirror
+    mirror=$(get_working_mirror)
     if [ -n "$mirror" ]; then
         echo "使用镜像下载..."
         if download_with_retry "${mirror}${url}" "$output"; then
