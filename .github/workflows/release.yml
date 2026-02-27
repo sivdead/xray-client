@@ -50,22 +50,23 @@ jobs:
 
     - name: Build executables (cross-compile aarch64)
       if: matrix.arch == 'aarch64'
-      uses: uraimo/run-on-arch-action@v2
+      uses: uraimo/run-on-arch-action@v3
       with:
         arch: aarch64
         distro: ubuntu22.04
         githubToken: ${{ github.token }}
         run: |
           apt-get update && apt-get install -y python3 python3-pip python3-venv
-          python3 -m pip install --break-system-packages pyinstaller pyyaml flask
+          python3 -m venv /tmp/build-venv
+          /tmp/build-venv/bin/pip install pyinstaller pyyaml flask
 
           # Build xray-client
-          python3 -m PyInstaller --onefile --name xray-client --clean --noconfirm --strip \
+          /tmp/build-venv/bin/pyinstaller --onefile --name xray-client --clean --noconfirm --strip \
             --hidden-import yaml \
             xray-client.py
 
           # Build xray-webui
-          python3 -m PyInstaller --onefile --name xray-webui --clean --noconfirm --strip \
+          /tmp/build-venv/bin/pyinstaller --onefile --name xray-webui --clean --noconfirm --strip \
             --hidden-import yaml \
             --hidden-import flask \
             --collect-all flask \
@@ -307,7 +308,7 @@ jobs:
         cp artifacts/executables-aarch64/xray-webui xray-webui-aarch64
 
     - name: Upload to Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |

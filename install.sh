@@ -133,10 +133,11 @@ else
     exit 1
 fi
 
-# 检测网络环境
+# 检测网络环境（如果外部已设置 NETWORK_MODE 则跳过检测）
 echo ""
-echo -e "${YELLOW}检测网络环境...${NC}"
-if check_github; then
+if [ -n "$NETWORK_MODE" ]; then
+    echo -e "${YELLOW}使用预设网络模式: ${NC}$NETWORK_MODE"
+elif check_github; then
     echo -e "${GREEN}✓ GitHub 可直连${NC}"
     NETWORK_MODE="direct"
 else
