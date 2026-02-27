@@ -18,7 +18,7 @@ jobs:
 
     - name: Check shell scripts
       run: |
-        shellcheck -S warning install.sh quick-install.sh build-offline.sh docker-entrypoint.sh
+        shellcheck -S warning install.sh quick-install.sh build-offline.sh build-executable.sh docker-entrypoint.sh
 
   ruff:
     name: Ruff Lint & Format
@@ -73,3 +73,35 @@ jobs:
       run: |
         python -c "import ast; ast.parse(open('xray-client.py').read())"
         python -c "import ast; ast.parse(open('web-ui.py').read())"
+
+  build-executable:
+    name: Build Executable (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: pip install pyinstaller pyyaml flask
+
+    - name: Build executables
+      run: |
+        pyinstaller --onefile --name xray-client --clean --noconfirm --strip \
+          --hidden-import yaml \
+          xray-client.py
+
+        pyinstaller --onefile --name xray-webui --clean --noconfirm --strip \
+          --hidden-import yaml \
+          --hidden-import flask \
+          --collect-all flask \
+          web-ui.py
+
+    - name: Verify executables
+      run: |
+        test -f dist/xray-client && echo "xray-client OK"
+        test -f dist/xray-webui && echo "xray-webui OK"
+        dist/xray-client --help || true
