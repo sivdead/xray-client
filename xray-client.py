@@ -168,7 +168,11 @@ class XrayClient:
                 self.enable_udp = config["local"].getboolean("udp", True)
                 self.hot_reload = config["local"].getboolean("hot_reload", True)
                 self.tun_mode = config["local"].getboolean("tun_mode", False)
-                self.tun_port = config["local"].getint("tun_port", 12345)
+                tun_port = config["local"].getint("tun_port", 12345)
+                if 1 <= tun_port <= 65535:
+                    self.tun_port = tun_port
+                else:
+                    logger.warning(f"tun_port {tun_port} 超出有效范围 (1-65535)，使用默认值 12345")
                 self.no_proxy = config["local"].get("no_proxy", "localhost,127.0.0.1,::1")
 
             if "node" in config:
@@ -1030,9 +1034,13 @@ class XrayClient:
     def disable_proxy(self):
         """关闭系统 HTTP/HTTPS 代理环境变量"""
         if os.path.exists(PROXY_PROFILE):
-            os.remove(PROXY_PROFILE)
-            print("系统代理已关闭")
-            print("当前终端请执行: unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy")
+            try:
+                os.remove(PROXY_PROFILE)
+                print("系统代理已关闭")
+                print("当前终端请执行: unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy")
+            except OSError as e:
+                logger.error(f"关闭系统代理失败: {e}")
+                return False
         else:
             print("系统代理未开启")
         return True
@@ -1042,6 +1050,38 @@ class XrayClient:
         cmd = [_resolve_executable("iptables")] + list(args)
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
+    def _get_xray_uid(self):
+        """获取 Xray 进程运行的 UID，用于 iptables 豁免，避免透明代理回环"""
+        import pwd
+
+        # 优先从 systemd 服务配置读取运行用户
+        try:
+            result = subprocess.run(
+                ["systemctl", "show", "xray", "--property=User", "--value"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+            )
+            xray_user = result.stdout.strip()
+            if xray_user:
+                return pwd.getpwnam(xray_user).pw_uid
+        except Exception:
+            pass
+
+        # 备选：从运行中的 xray 进程读取 UID
+        try:
+            result = subprocess.run(["pgrep", "-x", "xray"], stdout=subprocess.PIPE, universal_newlines=True)
+            pid = result.stdout.strip().split("\n")[0]
+            if pid:
+                with open(f"/proc/{pid}/status") as f:
+                    for line in f:
+                        if line.startswith("Uid:"):
+                            return int(line.split()[1])
+        except Exception:
+            pass
+
+        return None
+
     def _setup_tproxy_rules(self):
         """设置 iptables 透明代理规则（NAT REDIRECT）"""
         tport = str(self.tun_port)
@@ -1050,6 +1090,16 @@ class XrayClient:
         self._run_iptables("-t", "nat", "-N", IPTABLES_CHAIN)
         # 清空链
         self._run_iptables("-t", "nat", "-F", IPTABLES_CHAIN)
+
+        # 豁免 Xray 自身流量，防止出站连接被 REDIRECT 回环
+        xray_uid = self._get_xray_uid()
+        if xray_uid is not None:
+            self._run_iptables(
+                "-t", "nat", "-A", IPTABLES_CHAIN, "-m", "owner", "--uid-owner", str(xray_uid), "-j", "RETURN"
+            )
+            logger.info(f"已豁免 Xray 进程流量（UID: {xray_uid}）")
+        else:
+            logger.warning("无法获取 Xray 进程 UID，透明代理可能出现回环，请确认 Xray 运行用户")
 
         # 跳过私有地址和回环地址
         private_ranges = [
@@ -1099,15 +1149,25 @@ class XrayClient:
 
     def enable_tun(self):
         """开启 TUN 透明代理模式"""
-        # 持久化配置
-        self._save_tun_mode(True)
-        # 生成含透明代理入站的 Xray 配置
+        # 1. 更新内存状态并生成配置（尚未持久化）
+        self.tun_mode = True
         if not self.generate_config():
+            self.tun_mode = False
             return False
-        # 设置 iptables 规则
+
+        # 2. 设置 iptables 规则
         self._setup_tproxy_rules()
-        # 重启 Xray
-        self.restart_xray()
+
+        # 3. 重启 Xray；若失败则回滚 iptables 并恢复内存状态
+        if not self.restart_xray():
+            logger.error("Xray 重启失败，回滚 iptables 规则")
+            self._cleanup_tproxy_rules()
+            self.tun_mode = False
+            self.generate_config()
+            return False
+
+        # 4. 全部成功后才持久化
+        self._save_tun_mode(True)
         print("TUN 模式已开启")
         print(f"  透明代理端口: {self.tun_port}")
         print("  本机所有 TCP 流量将通过 Xray 代理（私有地址除外）")
@@ -1115,13 +1175,15 @@ class XrayClient:
 
     def disable_tun(self):
         """关闭 TUN 透明代理模式"""
-        # 先清理 iptables 规则
+        # 1. 无论后续是否成功，先清理 iptables 并持久化关闭状态
         self._cleanup_tproxy_rules()
-        # 持久化配置
         self._save_tun_mode(False)
-        # 重新生成不含透明代理入站的 Xray 配置
-        self.generate_config()
-        # 重启 Xray
+
+        # 2. 重新生成不含透明代理入站的配置
+        if not self.generate_config():
+            return False
+
+        # 3. 重启 Xray（不影响 iptables 已清理的结果）
         self.restart_xray()
         print("TUN 模式已关闭")
         return True
