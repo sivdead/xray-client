@@ -12,19 +12,19 @@ from flask import Flask, render_template_string, jsonify, request
 app = Flask(__name__)
 
 # 路径配置
-CLIENT_CONFIG_DIR = '/etc/xray-client'
-SUBSCRIPTION_FILE = os.path.join(CLIENT_CONFIG_DIR, 'subscription', 'nodes.json')
-INI_FILE = os.path.join(CLIENT_CONFIG_DIR, 'config.ini')
+CLIENT_CONFIG_DIR = "/etc/xray-client"
+SUBSCRIPTION_FILE = os.path.join(CLIENT_CONFIG_DIR, "subscription", "nodes.json")
+INI_FILE = os.path.join(CLIENT_CONFIG_DIR, "config.ini")
 
 # 基本认证 token（通过环境变量设置，未设置则不启用认证）
-AUTH_TOKEN = os.environ.get('WEB_UI_TOKEN', '')
+AUTH_TOKEN = os.environ.get("WEB_UI_TOKEN", "")
 
 
 def check_auth():
     """检查请求认证"""
     if not AUTH_TOKEN:
         return True  # 未配置 token 则不启用认证
-    token = request.args.get('token') or request.headers.get('X-Auth-Token', '')
+    token = request.args.get("token") or request.headers.get("X-Auth-Token", "")
     return token == AUTH_TOKEN
 
 
@@ -32,30 +32,32 @@ def check_auth():
 def auth_guard():
     """全局认证守卫"""
     if not check_auth():
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({"error": "Unauthorized"}), 401
 
 
 def load_nodes():
     """加载节点数据"""
     if os.path.exists(SUBSCRIPTION_FILE):
-        with open(SUBSCRIPTION_FILE, 'r', encoding='utf-8') as f:
+        with open(SUBSCRIPTION_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    return {'nodes': [], 'update_time': '从未'}
+    return {"nodes": [], "update_time": "从未"}
 
 
 def get_xray_status():
     """获取 Xray 服务状态"""
     try:
         result = subprocess.run(
-            ['systemctl', 'is-active', 'xray'],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
+            ["systemctl", "is-active", "xray"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
         )
         return result.stdout.strip()
     except Exception:
-        return '未知'
+        return "未知"
 
 
-@app.route('/')
+@app.route("/")
 def index():
     """主页"""
     data = load_nodes()
@@ -63,69 +65,73 @@ def index():
 
     return render_template_string(
         HTML_TEMPLATE,
-        nodes=data.get('nodes', []),
-        update_time=data.get('update_time', '从未'),
-        count=len(data.get('nodes', [])),
-        status=status
+        nodes=data.get("nodes", []),
+        update_time=data.get("update_time", "从未"),
+        count=len(data.get("nodes", [])),
+        status=status,
     )
 
 
-@app.route('/api/nodes')
+@app.route("/api/nodes")
 def api_nodes():
     """API: 获取节点列表"""
     return jsonify(load_nodes())
 
 
-@app.route('/api/status')
+@app.route("/api/status")
 def api_status():
     """API: 获取 Xray 状态"""
-    return jsonify({'status': get_xray_status()})
+    return jsonify({"status": get_xray_status()})
 
 
-@app.route('/api/select', methods=['POST'])
+@app.route("/api/select", methods=["POST"])
 def api_select():
     """API: 选择节点"""
     data = request.get_json(silent=True) or {}
-    index = data.get('index')
+    index = data.get("index")
     if not isinstance(index, int) or index < 0:
-        return jsonify({'success': False, 'error': '无效的节点索引'}), 400
+        return jsonify({"success": False, "error": "无效的节点索引"}), 400
     try:
         result = subprocess.run(
-            ['xray-client', 'select', '-i', str(index)],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
+            ["xray-client", "select", "-i", str(index)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
         )
-        subprocess.run(['xray-client', 'restart'], check=False)
-        return jsonify({'success': True, 'output': result.stdout})
+        subprocess.run(["xray-client", "restart"], check=False)
+        return jsonify({"success": True, "output": result.stdout})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({"success": False, "error": str(e)})
 
 
-@app.route('/api/update', methods=['POST'])
+@app.route("/api/update", methods=["POST"])
 def api_update():
     """API: 更新订阅"""
     try:
         result = subprocess.run(
-            ['xray-client', 'update'],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
-            timeout=60
+            ["xray-client", "update"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            timeout=60,
         )
-        subprocess.run(['xray-client', 'restart'], check=False)
-        return jsonify({'success': True, 'output': result.stdout + result.stderr})
+        subprocess.run(["xray-client", "restart"], check=False)
+        return jsonify({"success": True, "output": result.stdout + result.stderr})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({"success": False, "error": str(e)})
 
 
-@app.route('/api/restart', methods=['POST'])
+@app.route("/api/restart", methods=["POST"])
 def api_restart():
     """API: 重启 Xray"""
     try:
-        subprocess.run(['xray-client', 'restart'], check=True)
-        return jsonify({'success': True})
+        subprocess.run(["xray-client", "restart"], check=True)
+        return jsonify({"success": True})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({"success": False, "error": str(e)})
 
 
-HTML_TEMPLATE = '''<!DOCTYPE html>
+HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -351,11 +357,11 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
     </script>
 </body>
 </html>
-'''
+"""
 
-if __name__ == '__main__':
-    port = int(os.environ.get('WEB_UI_PORT', 5000))
-    bind = os.environ.get('WEB_UI_BIND', '127.0.0.1')
+if __name__ == "__main__":
+    port = int(os.environ.get("WEB_UI_PORT", 5000))
+    bind = os.environ.get("WEB_UI_BIND", "127.0.0.1")
     if AUTH_TOKEN:
         print("Auth enabled. Use ?token=<TOKEN> or X-Auth-Token header.")
     print(f"Starting Xray Client Web UI on http://{bind}:{port}")
