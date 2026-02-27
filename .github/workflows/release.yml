@@ -130,24 +130,35 @@ jobs:
         # Download multiple architectures
         for arch in Xray-linux-64 Xray-linux-arm64-v8a; do
           echo "Downloading $arch..."
-          curl -fsSL -o "offline-package/${arch}.zip" \
-            "https://github.com/XTLS/Xray-core/releases/download/${VERSION}/${arch}.zip" || \
-          curl -fsSL -o "offline-package/${arch}.zip" \
-            "https://ghproxy.com/https://github.com/XTLS/Xray-core/releases/download/${VERSION}/${arch}.zip"
+          if ! curl -fsSL -o "offline-package/${arch}.zip" \
+            "https://github.com/XTLS/Xray-core/releases/download/${VERSION}/${arch}.zip"; then
+            echo "Direct download failed for $arch, trying mirror..."
+            if ! curl -fsSL -o "offline-package/${arch}.zip" \
+              "https://ghproxy.com/https://github.com/XTLS/Xray-core/releases/download/${VERSION}/${arch}.zip"; then
+              echo "::error::Failed to download $arch from both direct and mirror sources"
+              exit 1
+            fi
+          fi
         done
 
     - name: Download GeoData
       run: |
         mkdir -p offline-package
-        curl -fsSL -o offline-package/geoip.dat \
-          https://github.com/v2fly/geoip/releases/latest/download/geoip.dat || \
-        curl -fsSL -o offline-package/geoip.dat \
-          https://ghproxy.com/https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
+        if ! curl -fsSL -o offline-package/geoip.dat \
+          https://github.com/v2fly/geoip/releases/latest/download/geoip.dat; then
+          echo "Direct download failed for geoip.dat, trying mirror..."
+          curl -fsSL -o offline-package/geoip.dat \
+            https://ghproxy.com/https://github.com/v2fly/geoip/releases/latest/download/geoip.dat || \
+            { echo "::error::Failed to download geoip.dat"; exit 1; }
+        fi
 
-        curl -fsSL -o offline-package/geosite.dat \
-          https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat || \
-        curl -fsSL -o offline-package/geosite.dat \
-          https://ghproxy.com/https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
+        if ! curl -fsSL -o offline-package/geosite.dat \
+          https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat; then
+          echo "Direct download failed for geosite.dat, trying mirror..."
+          curl -fsSL -o offline-package/geosite.dat \
+            https://ghproxy.com/https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat || \
+            { echo "::error::Failed to download geosite.dat"; exit 1; }
+        fi
 
     - name: Prepare Offline Package (x86_64)
       run: |

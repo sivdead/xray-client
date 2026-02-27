@@ -313,8 +313,8 @@ HAS_EXECUTABLE=false
 if [ -f "$SCRIPT_DIR/xray-client" ]; then
     if command -v file &> /dev/null && file "$SCRIPT_DIR/xray-client" | grep -q "ELF"; then
         HAS_EXECUTABLE=true
-    elif [ -x "$SCRIPT_DIR/xray-client" ]; then
-        # file 命令不可用时，通过可执行权限判断
+    elif [ -x "$SCRIPT_DIR/xray-client" ] && head -c 4 "$SCRIPT_DIR/xray-client" 2>/dev/null | grep -q $'\x7fELF'; then
+        # file 命令不可用时，通过 ELF magic bytes 判断
         HAS_EXECUTABLE=true
     fi
 fi
@@ -413,7 +413,9 @@ else
 
     # 安装 Python 依赖（用于 web-ui 和 Clash 格式解析）
     echo "安装 Python 依赖..."
-    python3 -m pip install --quiet pyyaml flask 2>/dev/null || true
+    if ! python3 -m pip install --quiet pyyaml flask 2>&1; then
+        echo -e "${YELLOW}可选依赖 pyyaml/flask 安装失败（Web UI 可能不可用，核心功能不受影响）${NC}"
+    fi
 fi
 
 # ==================== 步骤5: 创建配置文件 ====================
