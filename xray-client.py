@@ -1020,7 +1020,7 @@ class XrayClient:
             print("系统代理已开启")
             print(f"  HTTP  代理: http://127.0.0.1:{self.local_http_port}")
             print(f"  SOCKS 代理: socks5://127.0.0.1:{self.local_socks_port}")
-            print(f"\n新终端将自动使用代理，当前终端请执行:")
+            print("\n新终端将自动使用代理，当前终端请执行:")
             print(f"  source {PROXY_PROFILE}")
             return True
         except Exception as e:
