@@ -1,3 +1,18 @@
+[project]
+name = "xray-client"
+version = "0.1.0"
+description = "Lightweight Linux proxy client with JustMySocks subscription support"
+requires-python = ">=3.9"
+dependencies = [
+    "pyyaml",
+    "flask",
+]
+
+[project.optional-dependencies]
+build = [
+    "pyinstaller",
+]
+
 [tool.ruff]
 target-version = "py39"
 line-length = 120

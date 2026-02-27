@@ -133,10 +133,11 @@ else
     exit 1
 fi
 
-# 检测网络环境
+# 检测网络环境（如果外部已设置 NETWORK_MODE 则跳过检测）
 echo ""
-echo -e "${YELLOW}检测网络环境...${NC}"
-if check_github; then
+if [ -n "$NETWORK_MODE" ]; then
+    echo -e "${YELLOW}使用预设网络模式: ${NC}$NETWORK_MODE"
+elif check_github; then
     echo -e "${GREEN}✓ GitHub 可直连${NC}"
     NETWORK_MODE="direct"
 else
@@ -302,9 +303,24 @@ else
     fi
 fi
 
-# ==================== 步骤3: 安装 Python ====================
+# ==================== 步骤3: 安装 Python（按需）====================
 echo ""
-echo -e "${YELLOW}[3/5] 安装 Python 和依赖...${NC}"
+echo -e "${YELLOW}[3/5] 检查 Python 环境...${NC}"
+
+# 检查是否有预编译的可执行文件（离线包或在线下载）
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+HAS_EXECUTABLE=false
+if [ -f "$SCRIPT_DIR/xray-client" ]; then
+    if command -v file &> /dev/null && file "$SCRIPT_DIR/xray-client" | grep -q "ELF"; then
+        HAS_EXECUTABLE=true
+    elif [ -x "$SCRIPT_DIR/xray-client" ] && head -c 4 "$SCRIPT_DIR/xray-client" 2>/dev/null | grep -q $'\x7fELF'; then
+        # file 命令不可用时，通过 ELF magic bytes 判断
+        HAS_EXECUTABLE=true
+    fi
+fi
+if [ "$HAS_EXECUTABLE" = true ]; then
+    echo -e "${GREEN}检测到预编译可执行文件，跳过 Python 安装${NC}"
+fi
 
 install_python_deps() {
     if ! command -v python3 &> /dev/null; then
@@ -320,7 +336,7 @@ install_python_deps() {
             exit 1
         fi
     fi
-    
+
     # 检查 pip
     if ! python3 -m pip --version &> /dev/null 2>&1; then
         echo "安装 pip..."
@@ -332,11 +348,13 @@ install_python_deps() {
             fi
         }
     fi
-    
+
     echo -e "${GREEN}Python 安装完成${NC}"
 }
 
-install_python_deps
+if [ "$HAS_EXECUTABLE" = false ]; then
+    install_python_deps
+fi
 
 # ==================== 步骤4: 创建客户端脚本 ====================
 echo ""
@@ -346,45 +364,59 @@ echo -e "${YELLOW}[4/5] 创建 Xray Client 管理脚本...${NC}"
 mkdir -p "$CLIENT_CONFIG_DIR/subscription"
 mkdir -p "$CLIENT_LOG_DIR"
 
-# 从仓库下载最新版 Python 脚本（避免内嵌过期版本）
 SCRIPT_BASE_URL="https://raw.githubusercontent.com/sivdead/xray-client/master"
-echo "正在下载 xray-client 脚本..."
-if download_file "${SCRIPT_BASE_URL}/xray-client.py" "/usr/local/bin/xray-client" "$NETWORK_MODE"; then
-    echo -e "${GREEN}✓ xray-client 脚本下载成功${NC}"
-else
-    echo -e "${RED}下载 xray-client 脚本失败，使用本地备份...${NC}"
-    # 如果从仓库克隆安装，尝试使用本地文件
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    if [ -f "$SCRIPT_DIR/xray-client.py" ]; then
-        cp "$SCRIPT_DIR/xray-client.py" /usr/local/bin/xray-client
-        echo -e "${GREEN}✓ 使用本地 xray-client.py${NC}"
-    else
-        echo -e "${RED}无法获取 xray-client 脚本，安装失败${NC}"
-        exit 1
-    fi
-fi
 
-chmod +x /usr/local/bin/xray-client
+if [ "$HAS_EXECUTABLE" = true ]; then
+    # ---- 使用预编译可执行文件（无需 Python）----
+    echo "安装预编译可执行文件..."
+    cp "$SCRIPT_DIR/xray-client" /usr/local/bin/xray-client
+    chmod +x /usr/local/bin/xray-client
+    echo -e "${GREEN}✓ xray-client 可执行文件安装成功${NC}"
 
-# 下载 web-ui 脚本（可选）
-echo "正在下载 web-ui 脚本..."
-if download_file "${SCRIPT_BASE_URL}/web-ui.py" "/usr/local/bin/xray-webui" "$NETWORK_MODE"; then
-    chmod +x /usr/local/bin/xray-webui
-    echo -e "${GREEN}✓ Web UI 脚本下载成功${NC}"
-else
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    if [ -f "$SCRIPT_DIR/web-ui.py" ]; then
-        cp "$SCRIPT_DIR/web-ui.py" /usr/local/bin/xray-webui
+    if [ -f "$SCRIPT_DIR/xray-webui" ]; then
+        cp "$SCRIPT_DIR/xray-webui" /usr/local/bin/xray-webui
         chmod +x /usr/local/bin/xray-webui
-        echo -e "${GREEN}✓ 使用本地 web-ui.py${NC}"
+        echo -e "${GREEN}✓ xray-webui 可执行文件安装成功${NC}"
+    fi
+else
+    # ---- 使用 Python 脚本 ----
+    echo "正在下载 xray-client 脚本..."
+    if download_file "${SCRIPT_BASE_URL}/xray-client.py" "/usr/local/bin/xray-client" "$NETWORK_MODE"; then
+        echo -e "${GREEN}✓ xray-client 脚本下载成功${NC}"
     else
-        echo -e "${YELLOW}Web UI 脚本未找到，跳过（可稍后手动安装）${NC}"
+        echo -e "${RED}下载 xray-client 脚本失败，使用本地备份...${NC}"
+        if [ -f "$SCRIPT_DIR/xray-client.py" ]; then
+            cp "$SCRIPT_DIR/xray-client.py" /usr/local/bin/xray-client
+            echo -e "${GREEN}✓ 使用本地 xray-client.py${NC}"
+        else
+            echo -e "${RED}无法获取 xray-client 脚本，安装失败${NC}"
+            exit 1
+        fi
+    fi
+
+    chmod +x /usr/local/bin/xray-client
+
+    # 下载 web-ui 脚本（可选）
+    echo "正在下载 web-ui 脚本..."
+    if download_file "${SCRIPT_BASE_URL}/web-ui.py" "/usr/local/bin/xray-webui" "$NETWORK_MODE"; then
+        chmod +x /usr/local/bin/xray-webui
+        echo -e "${GREEN}✓ Web UI 脚本下载成功${NC}"
+    else
+        if [ -f "$SCRIPT_DIR/web-ui.py" ]; then
+            cp "$SCRIPT_DIR/web-ui.py" /usr/local/bin/xray-webui
+            chmod +x /usr/local/bin/xray-webui
+            echo -e "${GREEN}✓ 使用本地 web-ui.py${NC}"
+        else
+            echo -e "${YELLOW}Web UI 脚本未找到，跳过（可稍后手动安装）${NC}"
+        fi
+    fi
+
+    # 安装 Python 依赖（用于 web-ui 和 Clash 格式解析）
+    echo "安装 Python 依赖..."
+    if ! python3 -m pip install --quiet pyyaml flask 2>&1; then
+        echo -e "${YELLOW}可选依赖 pyyaml/flask 安装失败（Web UI 可能不可用，核心功能不受影响）${NC}"
     fi
 fi
-
-# 安装 Python 依赖（用于 web-ui 和 Clash 格式解析）
-echo "安装 Python 依赖..."
-python3 -m pip install --quiet pyyaml flask 2>/dev/null || true
 
 # ==================== 步骤5: 创建配置文件 ====================
 echo ""
