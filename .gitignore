@@ -15,6 +15,11 @@ test/
 .DS_Store
 Thumbs.db
 
+# 忽略 PyInstaller 构建产物
+build/
+dist/
+*.spec
+
 # 忽略敏感信息（如果用户自己添加）
 *.key
 *.pem
