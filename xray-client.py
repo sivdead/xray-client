@@ -190,6 +190,12 @@ class XrayClient:
             logger.error("订阅链接为空")
             return None
 
+        # 仅允许 http/https 协议，防止 file:// 等本地资源访问
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            logger.error(f"不支持的 URL 协议: {parsed.scheme}")
+            return None
+
         try:
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 

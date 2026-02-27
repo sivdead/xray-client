@@ -6,6 +6,7 @@ Xray Client Web UI - 简单的 Web 管理界面
 
 import os
 import json
+import secrets
 import subprocess
 from flask import Flask, render_template_string, jsonify, request
 
@@ -25,7 +26,7 @@ def check_auth():
     if not AUTH_TOKEN:
         return True  # 未配置 token 则不启用认证
     token = request.args.get("token") or request.headers.get("X-Auth-Token", "")
-    return token == AUTH_TOKEN
+    return secrets.compare_digest(token, AUTH_TOKEN)
 
 
 @app.before_request
@@ -51,6 +52,7 @@ def get_xray_status():
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
+            timeout=5,
         )
         return result.stdout.strip()
     except Exception:
@@ -98,6 +100,8 @@ def api_select():
             stderr=subprocess.PIPE,
             universal_newlines=True,
         )
+        if result.returncode != 0:
+            return jsonify({"success": False, "error": result.stderr or "节点选择失败"}), 500
         subprocess.run(["xray-client", "restart"], check=False)
         return jsonify({"success": True, "output": result.stdout})
     except Exception as e:
@@ -115,6 +119,8 @@ def api_update():
             universal_newlines=True,
             timeout=60,
         )
+        if result.returncode != 0:
+            return jsonify({"success": False, "error": result.stderr or "订阅更新失败"}), 500
         subprocess.run(["xray-client", "restart"], check=False)
         return jsonify({"success": True, "output": result.stdout + result.stderr})
     except Exception as e:
@@ -283,6 +289,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div id="message" class="message"></div>
 
     <script>
+        // 从 URL 参数中提取 token 并在后续 API 请求中自动携带
+        const AUTH_TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+
+        function apiFetch(url, options = {}) {
+            options.headers = options.headers || {};
+            if (AUTH_TOKEN) {
+                options.headers['X-Auth-Token'] = AUTH_TOKEN;
+            }
+            return fetch(url, options);
+        }
+
         function showMessage(text, isError = false) {
             const msg = document.getElementById('message');
             msg.textContent = text;
@@ -293,7 +310,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         async function selectNode(index) {
             try {
-                const res = await fetch('/api/select', {
+                const res = await apiFetch('/api/select', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ index })
@@ -314,7 +331,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         async function updateSub() {
             showMessage('正在更新订阅...');
             try {
-                const res = await fetch('/api/update', { method: 'POST' });
+                const res = await apiFetch('/api/update', { method: 'POST' });
                 const data = await res.json();
                 if (data.success) {
                     showMessage('订阅更新成功');
@@ -330,7 +347,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         async function restartService() {
             showMessage('正在重启服务...');
             try {
-                const res = await fetch('/api/restart', { method: 'POST' });
+                const res = await apiFetch('/api/restart', { method: 'POST' });
                 const data = await res.json();
                 if (data.success) {
                     showMessage('服务重启成功');
@@ -345,7 +362,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         // 定时刷新状态
         setInterval(async () => {
             try {
-                const res = await fetch('/api/status');
+                const res = await apiFetch('/api/status');
                 const data = await res.json();
                 const badge = document.querySelector('.status-badge');
                 if (badge) {
