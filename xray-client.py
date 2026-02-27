@@ -6,7 +6,6 @@ Xray Client - 支持 JustMySocks 订阅
 """
 
 import os
-import sys
 import json
 import base64
 import urllib.request
@@ -18,7 +17,6 @@ import logging
 import argparse
 import yaml
 import socket
-import select
 from datetime import datetime
 from configparser import ConfigParser
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -56,6 +54,7 @@ GH_MIRRORS = [
     ""
 ]
 
+
 class XrayClient:
     def __init__(self):
         self.subscriptions = []
@@ -79,7 +78,7 @@ class XrayClient:
         if not self._network_detected:
             self.detect_network()
             self._network_detected = True
-    
+
     def handle_reload(self, signum, frame):
         """处理 SIGHUP 信号，热重载配置"""
         logger.info("收到 SIGHUP 信号，执行热重载...")
@@ -92,11 +91,11 @@ class XrayClient:
             except Exception as e:
                 logger.warning(f"热重载失败，尝试正常重启: {e}")
                 self.restart_xray()
-    
+
     def detect_network(self):
         """检测网络并找到最佳镜像"""
         test_url = "https://github.com/XTLS/Xray-core/releases/latest"
-        
+
         # 尝试直连
         try:
             req = urllib.request.Request(test_url, method='HEAD')
@@ -119,15 +118,15 @@ class XrayClient:
                 return
             except Exception:
                 continue
-        
+
         logger.warning("无法连接 GitHub 及镜像，在线功能将不可用")
-    
+
     def load_config(self):
         """加载配置文件（支持多订阅）"""
         if os.path.exists(INI_FILE):
             config = ConfigParser()
             config.read(INI_FILE, encoding='utf-8')
-            
+
             # 加载订阅列表（支持多个）
             if 'subscription' in config:
                 # 兼容旧版单订阅
@@ -143,63 +142,63 @@ class XrayClient:
                             url = config['subscription'][key]
                             if url:
                                 self.subscriptions.append({'name': name, 'url': url})
-                
+
                 self.auto_update_interval = config['subscription'].getint('interval', 3600)
-            
+
             if 'local' in config:
                 self.local_socks_port = config['local'].getint('socks_port', 10808)
                 self.local_http_port = config['local'].getint('http_port', 10809)
                 self.enable_udp = config['local'].getboolean('udp', True)
                 self.hot_reload = config['local'].getboolean('hot_reload', True)
-            
+
             if 'node' in config:
                 self.selected_node = config['node'].getint('selected', 0)
-            
+
             logger.info(f"配置文件加载成功，共 {len(self.subscriptions)} 个订阅")
         else:
             logger.warning(f"配置文件不存在: {INI_FILE}")
-    
+
     def save_subscription_data(self, data):
         """保存订阅数据"""
         os.makedirs(os.path.dirname(SUBSCRIPTION_FILE), exist_ok=True)
         with open(SUBSCRIPTION_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-    
+
     def load_subscription_data(self):
         """加载订阅数据"""
         if os.path.exists(SUBSCRIPTION_FILE):
             with open(SUBSCRIPTION_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         return None
-    
+
     def fetch_subscription(self, url):
         """获取订阅链接内容"""
         self.ensure_network_detected()
         if not url:
             logger.error("订阅链接为空")
             return None
-        
+
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
-            
+
             req = urllib.request.Request(url, headers=headers)
-            
+
             with urllib.request.urlopen(req, timeout=30) as response:
                 content = response.read()
-                
+
                 try:
                     text = content.decode('utf-8')
                 except UnicodeDecodeError:
                     text = content.decode('utf-8', errors='ignore')
-                
+
                 return text
-                
+
         except Exception as e:
             logger.error(f"获取订阅失败: {e}")
             return None
-    
+
     def parse_base64(self, text):
         """解析 Base64 编码"""
         try:
@@ -209,7 +208,7 @@ class XrayClient:
             return base64.b64decode(text).decode('utf-8', errors='ignore')
         except Exception:
             return None
-    
+
     def parse_vmess(self, url):
         """解析 VMess 链接"""
         try:
@@ -217,10 +216,10 @@ class XrayClient:
             padding = 4 - len(b64_data) % 4
             if padding != 4:
                 b64_data += '=' * padding
-            
+
             json_str = base64.b64decode(b64_data).decode('utf-8', errors='ignore')
             node = json.loads(json_str)
-            
+
             return {
                 'type': 'vmess',
                 'name': node.get('ps', 'unnamed'),
@@ -238,29 +237,29 @@ class XrayClient:
         except Exception as e:
             logger.error(f"解析 VMess 失败: {e}")
             return None
-    
+
     def parse_vless(self, url):
         """解析 VLESS 链接"""
         try:
             url = url[8:]
-            
+
             if '#' in url:
                 url, name = url.rsplit('#', 1)
                 name = urllib.parse.unquote(name)
             else:
                 name = 'unnamed'
-            
+
             if '?' in url:
                 main_part, params = url.split('?', 1)
             else:
                 main_part, params = url, ''
-            
+
             uuid, rest = main_part.split('@', 1)
             server, port = rest.rsplit(':', 1)
             port = int(port)
-            
+
             param_dict = urllib.parse.parse_qs(params)
-            
+
             return {
                 'type': 'vless',
                 'name': name,
@@ -282,19 +281,19 @@ class XrayClient:
         except Exception as e:
             logger.error(f"解析 VLESS 失败: {e}")
             return None
-    
+
     def parse_ss(self, url):
         """解析 Shadowsocks 链接"""
         try:
             if url.startswith('ss://'):
                 url = url[5:]
-            
+
             if '#' in url:
                 url, name = url.rsplit('#', 1)
                 name = urllib.parse.unquote(name)
             else:
                 name = 'unnamed'
-            
+
             if '@' not in url:
                 padding = 4 - len(url) % 4
                 if padding != 4:
@@ -307,7 +306,7 @@ class XrayClient:
                 method_pass, server_port = url.split('@', 1)
                 method, password = method_pass.split(':', 1)
                 server, port = server_port.rsplit(':', 1)
-            
+
             return {
                 'type': 'shadowsocks',
                 'name': name,
@@ -319,29 +318,29 @@ class XrayClient:
         except Exception as e:
             logger.error(f"解析 SS 失败: {e}")
             return None
-    
+
     def parse_trojan(self, url):
         """解析 Trojan 链接"""
         try:
             url = url[9:]
-            
+
             if '#' in url:
                 url, name = url.rsplit('#', 1)
                 name = urllib.parse.unquote(name)
             else:
                 name = 'unnamed'
-            
+
             if '?' in url:
                 main_part, params = url.split('?', 1)
             else:
                 main_part, params = url, ''
-            
+
             password, rest = main_part.split('@', 1)
             server, port = rest.rsplit(':', 1)
             port = int(port)
-            
+
             param_dict = urllib.parse.parse_qs(params)
-            
+
             return {
                 'type': 'trojan',
                 'name': name,
@@ -353,7 +352,7 @@ class XrayClient:
         except Exception as e:
             logger.error(f"解析 Trojan 失败: {e}")
             return None
-    
+
     def parse_clash(self, content):
         """解析 Clash YAML 配置"""
         nodes = []
@@ -361,7 +360,7 @@ class XrayClient:
             data = yaml.safe_load(content)
             if not data or 'proxies' not in data:
                 return nodes
-            
+
             for proxy in data['proxies']:
                 try:
                     node = self.convert_clash_proxy(proxy)
@@ -370,20 +369,20 @@ class XrayClient:
                 except Exception as e:
                     logger.error(f"转换 Clash 节点失败: {e}")
                     continue
-            
+
             logger.info(f"从 Clash 配置解析了 {len(nodes)} 个节点")
         except Exception as e:
             logger.error(f"解析 Clash 配置失败: {e}")
-        
+
         return nodes
-    
+
     def convert_clash_proxy(self, proxy):
         """将 Clash proxy 转换为内部格式"""
         proxy_type = proxy.get('type', '').lower()
         name = proxy.get('name', 'unnamed')
         server = proxy.get('server', '')
         port = proxy.get('port', 0)
-        
+
         if proxy_type == 'ss':
             return {
                 'type': 'shadowsocks',
@@ -405,7 +404,11 @@ class XrayClient:
                 'network': proxy.get('network', 'tcp'),
                 'tls': 'tls' if proxy.get('tls') else '',
                 'sni': proxy.get('servername', ''),
-                'host': proxy.get('ws-headers', {}).get('Host', '') if proxy.get('ws-headers') else proxy.get('ws-opts', {}).get('headers', {}).get('Host', ''),
+                'host': (
+                    proxy.get('ws-headers', {}).get('Host', '')
+                    if proxy.get('ws-headers')
+                    else proxy.get('ws-opts', {}).get('headers', {}).get('Host', '')
+                ),
                 'path': proxy.get('ws-path', '') if 'ws-path' in proxy else proxy.get('ws-opts', {}).get('path', '')
             }
         elif proxy_type == 'trojan':
@@ -434,33 +437,33 @@ class XrayClient:
         else:
             logger.warning(f"不支持的 Clash 协议: {proxy_type}")
             return None
-    
+
     def parse_subscription(self, content):
         """解析订阅内容（支持多种格式）"""
         nodes = []
-        
+
         if not content:
             return nodes
-        
+
         # 尝试解析为 Clash YAML
         if content.strip().startswith('proxies:') or 'proxies:' in content[:200]:
             logger.info("检测到 Clash 格式")
             return self.parse_clash(content)
-        
+
         # 尝试 Base64 解码
         decoded = self.parse_base64(content)
         if decoded:
             lines = decoded.strip().split('\n')
         else:
             lines = content.strip().split('\n')
-        
+
         for line in lines:
             line = line.strip()
             if not line:
                 continue
-            
+
             node = None
-            
+
             if line.startswith('vmess://'):
                 node = self.parse_vmess(line)
             elif line.startswith('vless://'):
@@ -472,33 +475,33 @@ class XrayClient:
             elif line.startswith('http://') or line.startswith('https://'):
                 # 可能是订阅嵌套，忽略
                 continue
-            
+
             if node:
                 nodes.append(node)
                 logger.info(f"解析节点: {node['name']}")
-        
+
         return nodes
-    
+
     def update_subscription(self, name=None):
         """更新订阅（支持多订阅）"""
         all_nodes = []
         update_time = datetime.now().isoformat()
-        
+
         subs_to_update = self.subscriptions
         if name:
             subs_to_update = [s for s in self.subscriptions if s['name'] == name]
-        
+
         for sub in subs_to_update:
             if not sub.get('url'):
                 continue
-            
+
             logger.info(f"正在更新订阅 [{sub['name']}]: {sub['url'][:50]}...")
-            
+
             content = self.fetch_subscription(sub['url'])
             if not content:
                 logger.error(f"订阅 [{sub['name']}] 获取失败")
                 continue
-            
+
             nodes = self.parse_subscription(content)
             if nodes:
                 # 为节点添加订阅来源标记
@@ -508,11 +511,11 @@ class XrayClient:
                 logger.info(f"订阅 [{sub['name']}] 解析成功: {len(nodes)} 个节点")
             else:
                 logger.warning(f"订阅 [{sub['name']}] 未解析到节点")
-        
+
         if not all_nodes:
             logger.error("没有成功获取任何订阅")
             return False
-        
+
         # 保存合并的订阅数据
         data = {
             'update_time': update_time,
@@ -521,10 +524,10 @@ class XrayClient:
             'nodes': all_nodes
         }
         self.save_subscription_data(data)
-        
+
         logger.info(f"订阅更新完成，共 {len(all_nodes)} 个节点")
         return True
-    
+
     def test_node_latency(self, node, timeout=5):
         """测试节点延迟（TCP 连接测试）"""
         try:
@@ -533,7 +536,7 @@ class XrayClient:
             sock.settimeout(timeout)
             result = sock.connect_ex((node['server'], node['port']))
             sock.close()
-            
+
             if result == 0:
                 latency = (time.time() - start) * 1000
                 return {'node': node, 'latency': latency, 'ok': True}
@@ -541,38 +544,40 @@ class XrayClient:
                 return {'node': node, 'latency': -1, 'ok': False}
         except Exception as e:
             return {'node': node, 'latency': -1, 'ok': False, 'error': str(e)}
-    
+
     def test_all_nodes(self, max_workers=10):
         """测试所有节点延迟"""
         data = self.load_subscription_data()
         if not data or not data.get('nodes'):
             print("没有可用的节点数据")
             return
-        
+
         nodes = data['nodes']
         results = []
-        
+
         print(f"\n正在测试 {len(nodes)} 个节点...")
         print("=" * 80)
-        
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(self.test_node_latency, node): i 
-                      for i, node in enumerate(nodes)}
-            
+            futures = {
+                executor.submit(self.test_node_latency, node): i
+                for i, node in enumerate(nodes)
+            }
+
             for future in as_completed(futures):
                 i = futures[future]
                 result = future.result()
                 results.append((i, result))
-                
+
                 node = result['node']
                 if result['ok']:
                     print(f"[{i}] {node['name'][:40]:<40} {result['latency']:.1f}ms")
                 else:
                     print(f"[{i}] {node['name'][:40]:<40} 超时/失败")
-        
+
         # 排序并显示结果
         results.sort(key=lambda x: x[1]['latency'] if x[1]['ok'] else 999999)
-        
+
         print("\n" + "=" * 80)
         print("延迟排序（前10）:")
         print("-" * 80)
@@ -581,20 +586,20 @@ class XrayClient:
                 node = result['node']
                 marker = " *" if idx == self.selected_node else "  "
                 print(f"{marker} [{idx}] {node['name'][:40]:<40} {result['latency']:.1f}ms")
-        
+
         return results
-    
+
     def auto_select_best_node(self):
         """自动选择最佳节点"""
         results = self.test_all_nodes()
-        
+
         # 找到延迟最低的正常节点
         best = None
         for idx, result in results:
             if result['ok']:
                 best = idx
                 break
-        
+
         if best is not None:
             print(f"\n自动选择最佳节点: [{best}]")
             self.select_node(best)
@@ -603,7 +608,7 @@ class XrayClient:
         else:
             print("\n没有可用的节点")
             return False
-    
+
     def generate_xray_config(self, node):
         """生成 Xray 配置文件"""
         config = {
@@ -668,7 +673,7 @@ class XrayClient:
                 ]
             }
         }
-        
+
         outbound = self.create_outbound(node)
         config["outbounds"].append(outbound)
         config["outbounds"].append({
@@ -679,15 +684,15 @@ class XrayClient:
             "protocol": "blackhole",
             "tag": "block"
         })
-        
+
         config["routing"]["rules"].append({
             "type": "field",
             "network": "tcp,udp",
             "outboundTag": "proxy"
         })
-        
+
         return config
-    
+
     def create_outbound(self, node):
         """创建出站配置"""
         outbound = {
@@ -700,9 +705,9 @@ class XrayClient:
                 "concurrency": -1
             }
         }
-        
+
         node_type = node['type']
-        
+
         if node_type == 'vmess':
             outbound["settings"] = {
                 "vnext": [{
@@ -716,11 +721,11 @@ class XrayClient:
                     }]
                 }]
             }
-            
+
             stream_settings = {
                 "network": node.get('network', 'tcp')
             }
-            
+
             if node.get('tls'):
                 stream_settings["security"] = node['tls']
                 if node['tls'] == 'tls':
@@ -728,7 +733,7 @@ class XrayClient:
                         "serverName": node.get('sni', node['server']),
                         "allowInsecure": False
                     }
-            
+
             if node.get('network') == 'ws':
                 stream_settings["wsSettings"] = {
                     "path": node.get('path', '/'),
@@ -736,9 +741,9 @@ class XrayClient:
                         "Host": node.get('host', node['server'])
                     }
                 }
-            
+
             outbound["streamSettings"] = stream_settings
-            
+
         elif node_type == 'vless':
             outbound["settings"] = {
                 "vnext": [{
@@ -752,16 +757,16 @@ class XrayClient:
                     }]
                 }]
             }
-            
+
             net_type = node.get('net_type', 'tcp')
             stream_settings = {
                 "network": net_type
             }
-            
+
             security = node.get('security', '')
             if security:
                 stream_settings["security"] = security
-                
+
                 if security == 'tls':
                     stream_settings["tlsSettings"] = {
                         "serverName": node.get('sni', node['server']),
@@ -775,7 +780,7 @@ class XrayClient:
                         "shortId": node.get('sid', ''),
                         "spiderX": node.get('spx', '')
                     }
-            
+
             if net_type == 'ws':
                 stream_settings["wsSettings"] = {
                     "path": node.get('path', '/'),
@@ -787,9 +792,9 @@ class XrayClient:
                 stream_settings["grpcSettings"] = {
                     "serviceName": node.get('path', '')
                 }
-            
+
             outbound["streamSettings"] = stream_settings
-            
+
         elif node_type == 'shadowsocks':
             outbound["settings"] = {
                 "servers": [{
@@ -800,7 +805,7 @@ class XrayClient:
                     "level": 0
                 }]
             }
-            
+
         elif node_type == 'trojan':
             outbound["settings"] = {
                 "servers": [{
@@ -810,58 +815,58 @@ class XrayClient:
                     "level": 0
                 }]
             }
-            
+
             stream_settings = {
                 "network": "tcp"
             }
-            
+
             if node.get('sni'):
                 stream_settings["security"] = "tls"
                 stream_settings["tlsSettings"] = {
                     "serverName": node['sni'],
                     "allowInsecure": False
                 }
-            
+
             outbound["streamSettings"] = stream_settings
-        
+
         return outbound
-    
+
     def generate_config(self, node_index=None):
         """生成 Xray 配置文件"""
         if node_index is None:
             node_index = self.selected_node
-        
+
         data = self.load_subscription_data()
         if not data or not data.get('nodes'):
             logger.error("没有可用的订阅数据")
             return False
-        
+
         nodes = data['nodes']
         if node_index >= len(nodes):
             logger.error(f"节点索引 {node_index} 超出范围")
             return False
-        
+
         node = nodes[node_index]
         logger.info(f"使用节点 [{node_index}]: {node['name']}")
-        
+
         config = self.generate_xray_config(node)
-        
+
         os.makedirs(os.path.dirname(XRAY_CONFIG), exist_ok=True)
         os.makedirs('/var/log/xray', exist_ok=True)
-        
+
         with open(XRAY_CONFIG, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-        
+
         subprocess.run(['chmod', '644', XRAY_CONFIG], check=False)
-        
+
         logger.info(f"配置文件已保存: {XRAY_CONFIG}")
         return True
-    
+
     def reload_xray(self):
         """热重载 Xray"""
         if not self.hot_reload:
             return self.restart_xray()
-        
+
         try:
             # 发送 USR1 信号触发热重载
             result = subprocess.run(
@@ -877,7 +882,7 @@ class XrayClient:
         except Exception as e:
             logger.error(f"热重载出错: {e}")
             return self.restart_xray()
-    
+
     def start_xray(self):
         """启动 Xray 服务"""
         logger.info("启动 Xray 服务...")
@@ -891,13 +896,13 @@ class XrayClient:
         else:
             logger.error(f"启动失败: {result.stderr}")
             return False
-    
+
     def stop_xray(self):
         """停止 Xray 服务"""
         logger.info("停止 Xray 服务...")
         subprocess.run(['systemctl', 'stop', 'xray'], check=False)
         logger.info("Xray 服务已停止")
-    
+
     def restart_xray(self):
         """重启 Xray 服务"""
         logger.info("重启 Xray 服务...")
@@ -911,61 +916,61 @@ class XrayClient:
         else:
             logger.error(f"重启失败: {result.stderr}")
             return False
-    
+
     def status_xray(self):
         """查看 Xray 状态"""
         subprocess.run(['systemctl', 'status', 'xray'])
-    
+
     def list_nodes(self):
         """列出所有节点"""
         data = self.load_subscription_data()
         if not data or not data.get('nodes'):
             print("\n没有可用的节点数据，请先更新订阅")
             return
-        
+
         nodes = data['nodes']
         print(f"\n{'='*85}")
         print(f"共 {len(nodes)} 个节点 (最后更新: {data.get('update_time', '未知')})")
         print(f"{'='*85}")
         print(f"{'索引':<6}{'类型':<12}{'订阅':<10}{'名称':<35}{'服务器':<20}")
         print("-" * 85)
-        
+
         for i, node in enumerate(nodes):
             marker = " *" if i == self.selected_node else "  "
             name = (node['name'][:33] + '..') if len(node['name']) > 33 else node['name']
             server = (node['server'][:18] + '..') if len(node['server']) > 18 else node['server']
             sub = node.get('subscription', 'default')[:8]
             print(f"{marker}{i:<4}{node['type']:<12}{sub:<10}{name:<35}{server:<20}")
-        
+
         print("-" * 85)
         print("带 * 的为当前选中节点")
         print()
-    
+
     def select_node(self, index):
         """选择节点"""
         data = self.load_subscription_data()
         if not data or not data.get('nodes'):
             print("没有可用的节点数据")
             return False
-        
+
         nodes = data['nodes']
         if index < 0 or index >= len(nodes):
             print(f"节点索引 {index} 超出范围 (0-{len(nodes)-1})")
             return False
-        
+
         self.selected_node = index
-        
+
         config = ConfigParser()
         if os.path.exists(INI_FILE):
             config.read(INI_FILE, encoding='utf-8')
-        
+
         if 'node' not in config:
             config['node'] = {}
         config['node']['selected'] = str(index)
-        
+
         with open(INI_FILE, 'w', encoding='utf-8') as f:
             config.write(f)
-        
+
         print(f"已选择节点 [{index}]: {nodes[index]['name']}")
         return True
 
@@ -985,105 +990,105 @@ def main():
   %(prog)s apply                     # 应用配置
   %(prog)s reload                    # 热重载配置
   %(prog)s status                    # 查看 Xray 状态
-  
+
 配置文件: /etc/xray-client/config.ini
         """
     )
-    
+
     subparsers = parser.add_subparsers(dest='command', help='可用命令')
-    
+
     # update 命令
     update_parser = subparsers.add_parser('update', help='更新订阅')
     update_parser.add_argument('-n', '--name', help='指定订阅名称')
-    
+
     # list 命令
     subparsers.add_parser('list', help='列出所有节点')
-    
+
     # select 命令
     select_parser = subparsers.add_parser('select', help='选择节点')
     select_parser.add_argument('-i', '--index', type=int, required=True, help='节点索引')
-    
+
     # test 命令
     test_parser = subparsers.add_parser('test', help='测试节点延迟')
     test_parser.add_argument('-t', '--timeout', type=int, default=5, help='超时时间(秒)')
-    
+
     # auto-select 命令
     subparsers.add_parser('auto-select', help='自动选择最佳节点')
-    
+
     # apply 命令
     subparsers.add_parser('apply', help='应用配置')
-    
+
     # reload 命令
     subparsers.add_parser('reload', help='热重载配置')
-    
+
     # start/stop/restart/status 命令
     subparsers.add_parser('start', help='启动 Xray 服务')
     subparsers.add_parser('stop', help='停止 Xray 服务')
     subparsers.add_parser('restart', help='重启 Xray 服务')
     subparsers.add_parser('status', help='查看 Xray 状态')
-    
+
     # ping 命令
-    ping_parser = subparsers.add_parser('ping', help='测试代理连接')
-    
+    subparsers.add_parser('ping', help='测试代理连接')
+
     args = parser.parse_args()
-    
+
     if not args.command:
         parser.print_help()
         return
-    
+
     client = XrayClient()
-    
+
     if args.command == 'update':
         if client.update_subscription(args.name):
             client.generate_config()
             print("\n订阅更新完成")
-    
+
     elif args.command == 'list':
         client.list_nodes()
-    
+
     elif args.command == 'select':
         if client.select_node(args.index):
             client.generate_config()
             print("\n节点已切换，运行 'xray-client apply' 或 'xray-client reload' 应用")
-    
+
     elif args.command == 'test':
         client.test_all_nodes()
-    
+
     elif args.command == 'auto-select':
         if client.auto_select_best_node():
             client.restart_xray()
-    
+
     elif args.command == 'apply':
         client.generate_config()
         client.restart_xray()
-    
+
     elif args.command == 'reload':
         client.generate_config()
         client.reload_xray()
-    
+
     elif args.command == 'start':
         client.start_xray()
-    
+
     elif args.command == 'stop':
         client.stop_xray()
-    
+
     elif args.command == 'restart':
         client.generate_config()
         client.restart_xray()
-    
+
     elif args.command == 'status':
         client.status_xray()
-    
+
     elif args.command == 'ping':
         print("测试代理连接...")
         result = subprocess.run(
-            ['curl', '-s', '-o', '/dev/null', '-w', '%{http_code}', 
-             '-x', f'http://127.0.0.1:{client.local_http_port}', 
+            ['curl', '-s', '-o', '/dev/null', '-w', '%{http_code}',
+             '-x', f'http://127.0.0.1:{client.local_http_port}',
              '--connect-timeout', '10', 'https://www.google.com'],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
         )
         if result.stdout.strip() == '200':
-            print(f"代理连接成功! HTTP 状态码: 200")
+            print("代理连接成功! HTTP 状态码: 200")
         else:
             print(f"代理连接失败，HTTP 状态码: {result.stdout.strip()}")
 

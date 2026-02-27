@@ -5,10 +5,8 @@ Xray Client Web UI - 简单的 Web 管理界面
 """
 
 import os
-import sys
 import json
 import subprocess
-from datetime import datetime
 from flask import Flask, render_template_string, jsonify, request
 
 app = Flask(__name__)
@@ -359,6 +357,6 @@ if __name__ == '__main__':
     port = int(os.environ.get('WEB_UI_PORT', 5000))
     bind = os.environ.get('WEB_UI_BIND', '127.0.0.1')
     if AUTH_TOKEN:
-        print(f"Auth enabled. Use ?token=<TOKEN> or X-Auth-Token header.")
+        print("Auth enabled. Use ?token=<TOKEN> or X-Auth-Token header.")
     print(f"Starting Xray Client Web UI on http://{bind}:{port}")
     app.run(host=bind, port=port, debug=False)
