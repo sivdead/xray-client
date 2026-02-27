@@ -81,6 +81,7 @@ class XrayClient:
         self.hot_reload = True  # 启用热重载
         self.tun_mode = False  # TUN 透明代理模式
         self.tun_port = 12345  # 透明代理监听端口
+        self.no_proxy = "localhost,127.0.0.1,::1"  # 不走代理的地址
         self._network_detected = False
 
         self.load_config()
@@ -168,6 +169,7 @@ class XrayClient:
                 self.hot_reload = config["local"].getboolean("hot_reload", True)
                 self.tun_mode = config["local"].getboolean("tun_mode", False)
                 self.tun_port = config["local"].getint("tun_port", 12345)
+                self.no_proxy = config["local"].get("no_proxy", "localhost,127.0.0.1,::1")
 
             if "node" in config:
                 self.selected_node = config["node"].getint("selected", 0)
@@ -1007,8 +1009,8 @@ class XrayClient:
             f"export HTTP_PROXY=http://127.0.0.1:{self.local_http_port}\n"
             f"export HTTPS_PROXY=http://127.0.0.1:{self.local_http_port}\n"
             f"export all_proxy=socks5://127.0.0.1:{self.local_socks_port}\n"
-            "export no_proxy=localhost,127.0.0.1,::1\n"
-            "export NO_PROXY=localhost,127.0.0.1,::1\n"
+            f"export no_proxy={self.no_proxy}\n"
+            f"export NO_PROXY={self.no_proxy}\n"
         )
         try:
             os.makedirs(os.path.dirname(PROXY_PROFILE), exist_ok=True)
