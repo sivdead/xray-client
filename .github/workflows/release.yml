@@ -54,6 +54,7 @@ jobs:
       with:
         arch: aarch64
         distro: ubuntu22.04
+        githubToken: ${{ github.token }}
         run: |
           apt-get update && apt-get install -y python3 python3-pip python3-venv
           python3 -m pip install --break-system-packages pyinstaller pyyaml flask
@@ -185,11 +186,11 @@ jobs:
         echo ""
         echo -e "${GREEN}安装完成!${NC}"
         echo ""
-EOF
+        EOF
         chmod +x xray-client-offline/install-offline.sh
 
         # Create README for offline package
-        cat > xray-client-offline/README.txt << EOF
+        cat > xray-client-offline/README.txt << README_EOF
         Xray Client 离线安装包
         ========================
 
@@ -202,7 +203,7 @@ EOF
           sudo ./install-offline.sh
 
         更多说明见 README.md
-EOF
+        README_EOF
 
         # Create archive
         tar czf xray-client-offline-x86_64.tar.gz xray-client-offline/
@@ -267,10 +268,10 @@ EOF
         echo ""
         echo -e "${GREEN}安装完成!${NC}"
         echo ""
-EOF
+        EOF
         chmod +x xray-client-offline/install-offline.sh
 
-        cat > xray-client-offline/README.txt << EOF
+        cat > xray-client-offline/README.txt << README_EOF
         Xray Client 离线安装包
         ========================
 
@@ -283,7 +284,7 @@ EOF
           sudo ./install-offline.sh
 
         更多说明见 README.md
-EOF
+        README_EOF
 
         tar czf xray-client-offline-aarch64.tar.gz xray-client-offline/
         rm -rf xray-client-offline
@@ -298,6 +299,13 @@ EOF
         ls -lh artifacts/executables-x86_64/
         ls -lh artifacts/executables-aarch64/
 
+    - name: Rename executables with architecture suffix
+      run: |
+        cp artifacts/executables-x86_64/xray-client xray-client-x86_64
+        cp artifacts/executables-x86_64/xray-webui xray-webui-x86_64
+        cp artifacts/executables-aarch64/xray-client xray-client-aarch64
+        cp artifacts/executables-aarch64/xray-webui xray-webui-aarch64
+
     - name: Upload to Release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
@@ -305,13 +313,17 @@ EOF
         files: |
           xray-client-offline-x86_64.tar.gz
           xray-client-offline-aarch64.tar.gz
-          artifacts/executables-x86_64/xray-client
-          artifacts/executables-x86_64/xray-webui
+          xray-client-x86_64
+          xray-webui-x86_64
+          xray-client-aarch64
+          xray-webui-aarch64
         body: |
           ## Xray Client ${{ github.ref_name }}
 
           ### 独立可执行文件（推荐）
-          下载 `xray-client` 和 `xray-webui` 可直接运行，无需安装 Python 环境。
+          下载对应架构的 `xray-client` 和 `xray-webui` 可直接运行，无需安装 Python 环境。
+          - x86_64: `xray-client-x86_64` / `xray-webui-x86_64`
+          - aarch64: `xray-client-aarch64` / `xray-webui-aarch64`
 
           ### 离线安装包
           - `xray-client-offline-x86_64.tar.gz` - x86_64 架构离线包

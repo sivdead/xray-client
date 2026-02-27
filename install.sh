@@ -309,8 +309,15 @@ echo -e "${YELLOW}[3/5] 检查 Python 环境...${NC}"
 # 检查是否有预编译的可执行文件（离线包或在线下载）
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HAS_EXECUTABLE=false
-if [ -f "$SCRIPT_DIR/xray-client" ] && file "$SCRIPT_DIR/xray-client" | grep -q "ELF"; then
-    HAS_EXECUTABLE=true
+if [ -f "$SCRIPT_DIR/xray-client" ]; then
+    if command -v file &> /dev/null && file "$SCRIPT_DIR/xray-client" | grep -q "ELF"; then
+        HAS_EXECUTABLE=true
+    elif [ -x "$SCRIPT_DIR/xray-client" ]; then
+        # file 命令不可用时，通过可执行权限判断
+        HAS_EXECUTABLE=true
+    fi
+fi
+if [ "$HAS_EXECUTABLE" = true ]; then
     echo -e "${GREEN}检测到预编译可执行文件，跳过 Python 安装${NC}"
 fi
 
