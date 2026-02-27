@@ -37,6 +37,8 @@ A lightweight Xray client with JustMySocks subscription support for TencentOS, C
 - ✅ **Scheduled Updates** - Systemd timer for daily subscription updates
 - ✅ **Hot Reload** - Reload config without restarting service
 - ✅ **Docker Support** - Official Docker image available
+- ✅ **System Proxy Toggle** - One-command enable/disable of system-wide HTTP/SOCKS proxy env vars
+- ✅ **TUN Transparent Proxy** - Route all TCP traffic through Xray via iptables (no per-app config needed)
 
 ## 📋 Requirements
 
@@ -138,6 +140,12 @@ udp = true
 # Enable hot reload
 hot_reload = true
 
+# Transparent proxy (TUN) port — used by tun-on/tun-off
+tun_port = 12345
+
+# Addresses that bypass the system proxy (used by proxy-on)
+no_proxy = localhost,127.0.0.1,::1
+
 [node]
 # Default selected node index
 selected = 0
@@ -174,6 +182,18 @@ sudo xray-client status
 
 # Test proxy connection
 sudo xray-client ping
+
+# Enable system-wide HTTP/SOCKS proxy env vars (writes to /etc/profile.d/)
+sudo xray-client proxy-on
+
+# Disable system proxy
+sudo xray-client proxy-off
+
+# Enable TUN transparent proxy (iptables redirect + dokodemo-door)
+sudo xray-client tun-on
+
+# Disable TUN transparent proxy
+sudo xray-client tun-off
 ```
 
 ### Service Control
@@ -249,23 +269,43 @@ docker run -d -e SUB_URL=xxx -p 10808:10808 -p 10809:10809 xray-client
 
 ## 🔧 Proxy Settings
 
-After installation, configure system-wide proxy:
-
-### Current Session
+### System Proxy (HTTP/SOCKS env vars)
 
 ```bash
-# Enable proxy
-export http_proxy=http://127.0.0.1:10809
-export https_proxy=http://127.0.0.1:10809
-export no_proxy=localhost,127.0.0.1
+# Enable — writes http_proxy / https_proxy / all_proxy to /etc/profile.d/xray-proxy.sh
+sudo xray-client proxy-on
 
-# Or use the helper
-source proxy-on
+# New terminals pick it up automatically. For the current terminal:
+source /etc/profile.d/xray-proxy.sh
+
+# Disable — removes the profile file
+sudo xray-client proxy-off
+# Also run in current terminal:
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy
 ```
 
-### Permanent (All Users)
+To exclude additional addresses from the proxy, add `no_proxy` to `config.ini`:
 
-Already configured in `/etc/profile.d/proxy.sh`, takes effect on next login.
+```ini
+[local]
+no_proxy = localhost,127.0.0.1,::1,10.0.0.0/8,192.168.0.0/16
+```
+
+### TUN Transparent Proxy (no per-app config needed)
+
+Routes **all TCP traffic** from the machine through Xray using iptables NAT redirect.
+Private address ranges (10.x, 192.168.x, etc.) are automatically excluded.
+
+```bash
+# Enable TUN mode (iptables + dokodemo-door inbound on port 12345)
+sudo xray-client tun-on
+
+# Disable TUN mode and clean up iptables rules
+sudo xray-client tun-off
+```
+
+> **Note:** TUN mode state (`tun_mode`) is persisted in `config.ini` and survives Xray restarts.
+> Re-run `tun-on` after a system reboot to re-apply iptables rules.
 
 ### Application-Specific
 
@@ -352,7 +392,7 @@ bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)
 sudo rm -rf /etc/xray-client
 sudo rm -rf /var/log/xray-client
 sudo rm -f /usr/local/bin/xray-client
-sudo rm -f /etc/profile.d/proxy.sh
+sudo rm -f /etc/profile.d/xray-proxy.sh
 
 # Remove systemd timer
 sudo systemctl stop xray-client-update.timer
