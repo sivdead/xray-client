@@ -1,0 +1,12 @@
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E501",  # line-too-long: 由 formatter 处理，模板字符串中不可避免
+]
+
+[tool.ruff.format]
+quote-style = "double"
