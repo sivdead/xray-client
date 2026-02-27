@@ -11,6 +11,7 @@ import base64
 import urllib.request
 import urllib.parse
 import subprocess
+import shutil
 import time
 import signal
 import logging
@@ -53,6 +54,17 @@ GH_MIRRORS = [
     "https://ghps.cc/",
     "",
 ]
+
+
+def _resolve_executable(name):
+    """Resolve a command name to its absolute path via shutil.which().
+
+    Prevents PATH manipulation from causing unintended command execution.
+    """
+    path = shutil.which(name)
+    if path is None:
+        raise FileNotFoundError(f"Required executable not found in PATH: {name}")
+    return path
 
 
 class XrayClient:
@@ -831,7 +843,7 @@ class XrayClient:
         with open(XRAY_CONFIG, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
 
-        subprocess.run(["chmod", "644", XRAY_CONFIG], check=False)
+        subprocess.run([_resolve_executable("chmod"), "644", XRAY_CONFIG], check=False)
 
         logger.info(f"配置文件已保存: {XRAY_CONFIG}")
         return True
@@ -863,7 +875,7 @@ class XrayClient:
         """启动 Xray 服务"""
         logger.info("启动 Xray 服务...")
         result = subprocess.run(
-            ["systemctl", "start", "xray"],
+            [_resolve_executable("systemctl"), "start", "xray"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
@@ -878,14 +890,14 @@ class XrayClient:
     def stop_xray(self):
         """停止 Xray 服务"""
         logger.info("停止 Xray 服务...")
-        subprocess.run(["systemctl", "stop", "xray"], check=False)
+        subprocess.run([_resolve_executable("systemctl"), "stop", "xray"], check=False)
         logger.info("Xray 服务已停止")
 
     def restart_xray(self):
         """重启 Xray 服务"""
         logger.info("重启 Xray 服务...")
         result = subprocess.run(
-            ["systemctl", "restart", "xray"],
+            [_resolve_executable("systemctl"), "restart", "xray"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
@@ -899,7 +911,7 @@ class XrayClient:
 
     def status_xray(self):
         """查看 Xray 状态"""
-        subprocess.run(["systemctl", "status", "xray"])
+        subprocess.run([_resolve_executable("systemctl"), "status", "xray"])
 
     def list_nodes(self):
         """列出所有节点"""
