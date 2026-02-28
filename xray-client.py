@@ -1038,17 +1038,19 @@ class XrayClient:
             "# Sourced automatically by new bash/sh sessions.\n"
             "# proxy-on / proxy-off apply changes to the CURRENT shell without manual sourcing.\n"
             "proxy-on() {\n"
-            "    sudo xray-client proxy-on \"$@\" && . /etc/profile.d/xray-proxy.sh\n"
+            '    sudo xray-client proxy-on "$@" && . /etc/profile.d/xray-proxy.sh\n'
             "}\n"
             "proxy-off() {\n"
-            "    sudo xray-client proxy-off \"$@\" && \\\n"
+            '    sudo xray-client proxy-off "$@" && \\\n'
             "        unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy no_proxy NO_PROXY\n"
             "}\n"
         )
         os.makedirs(os.path.dirname(PROXY_FUNCTIONS_FILE), exist_ok=True)
         with open(PROXY_FUNCTIONS_FILE, "w", encoding="utf-8") as f:
             f.write(content)
-        subprocess.run([_resolve_executable("chmod"), "644", PROXY_FUNCTIONS_FILE], check=False, env=_clean_subprocess_env())
+        subprocess.run(
+            [_resolve_executable("chmod"), "644", PROXY_FUNCTIONS_FILE], check=False, env=_clean_subprocess_env()
+        )
 
     def enable_proxy(self):
         """开启系统 HTTP/HTTPS 代理环境变量"""
@@ -1067,7 +1069,9 @@ class XrayClient:
             os.makedirs(os.path.dirname(PROXY_PROFILE), exist_ok=True)
             with open(PROXY_PROFILE, "w", encoding="utf-8") as f:
                 f.write(content)
-            subprocess.run([_resolve_executable("chmod"), "644", PROXY_PROFILE], check=False, env=_clean_subprocess_env())
+            subprocess.run(
+                [_resolve_executable("chmod"), "644", PROXY_PROFILE], check=False, env=_clean_subprocess_env()
+            )
             print("系统代理已开启")
             print(f"  HTTP  代理: http://127.0.0.1:{self.local_http_port}")
             print(f"  SOCKS 代理: socks5://127.0.0.1:{self.local_socks_port}")
@@ -1097,7 +1101,9 @@ class XrayClient:
     def _run_iptables(self, *args):
         """执行 iptables 命令，返回 CompletedProcess"""
         cmd = [_resolve_executable("iptables")] + list(args)
-        return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, env=_clean_subprocess_env())
+        return subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, env=_clean_subprocess_env()
+        )
 
     def _get_xray_uid(self):
         """获取 Xray 进程运行的 UID，用于 iptables 豁免，避免透明代理回环"""
@@ -1120,7 +1126,9 @@ class XrayClient:
 
         # 备选：从运行中的 xray 进程读取 UID
         try:
-            result = subprocess.run(["pgrep", "-x", "xray"], stdout=subprocess.PIPE, universal_newlines=True, env=_clean_subprocess_env())
+            result = subprocess.run(
+                ["pgrep", "-x", "xray"], stdout=subprocess.PIPE, universal_newlines=True, env=_clean_subprocess_env()
+            )
             pid = result.stdout.strip().split("\n")[0]
             if pid:
                 with open(f"/proc/{pid}/status") as f:
