@@ -7,7 +7,7 @@
 - 多协议支持：VMess、VLESS、Shadowsocks、Trojan
 - 支持 Clash YAML 订阅格式
 - 节点测速与自动选择
-- 可选 Web 管理界面
+- TUI 终端交互管理界面
 - Docker 支持
 - Systemd 服务集成
 - 一键开关系统代理
@@ -22,7 +22,7 @@
 - [配置说明](#️-配置说明)
 - [使用命令](#-使用命令)
 - [代理设置](#-代理设置)
-- [Web 界面](#-web-界面)
+- [TUI 界面](#️-tui-界面)
 - [Docker](#-docker)
 - [常见问题](#-常见问题)
 - [卸载](#️-卸载)
@@ -34,7 +34,7 @@
 - ✅ **JustMySocks 订阅** — 自动更新订阅链接
 - ✅ **多协议支持** — VMess、VLESS、Shadowsocks、Trojan
 - ✅ **Clash 格式** — 支持 Clash YAML 订阅格式
-- ✅ **Web 管理界面** — 浏览器管理节点
+- ✅ **TUI 管理界面** — 终端交互管理节点
 - ✅ **自动选择节点** — 测速并自动选择最佳节点
 - ✅ **定时更新** — Systemd Timer 每日自动更新订阅
 - ✅ **热重载** — 无需重启服务即可重载配置
@@ -288,20 +288,25 @@ EOF
 systemctl daemon-reload && systemctl restart docker
 ```
 
-## 🌐 Web 界面
+## 🖥️ TUI 界面
 
 ```bash
-# 安装 Flask
-sudo pip3 install flask pyyaml
-
-# 启动 Web UI
-cd /root/xray-client
-sudo python3 web-ui.py
-
-# 浏览器访问 http://服务器IP:5000
+# 启动 TUI
+sudo xray-tui
 ```
 
-功能：查看节点列表、一键切换节点、更新订阅、查看服务状态。
+快捷键：
+- `↑`/`↓` 或 `j`/`k` — 上下移动
+- `Enter` — 选择节点并应用
+- `u` — 更新订阅
+- `r` — 重启服务
+- `t` — 测试节点延迟
+- `a` — 自动选择最佳节点
+- `p` — 测试代理连接
+- `l` / `F5` — 刷新数据
+- `q` — 退出
+
+功能：实时服务状态、协议类型彩色标注、节点列表滚动、后台异步操作。
 
 ## 🐳 Docker
 
@@ -314,15 +319,6 @@ docker run -d \
   -p 10809:10809 \
   sivdead/xray-client
 
-# 同时启用 Web UI
-docker run -d \
-  --name xray-client \
-  -e SUB_URL=https://your-subscription-url \
-  -e WEB_UI=true \
-  -p 10808:10808 \
-  -p 10809:10809 \
-  -p 5000:5000 \
-  sivdead/xray-client
 ```
 
 ## 🔍 常见问题

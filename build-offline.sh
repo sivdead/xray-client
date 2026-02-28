@@ -72,13 +72,13 @@ echo "复制安装脚本..."
 cp install.sh "$BUILD_DIR/"
 cp quick-install.sh "$BUILD_DIR/"
 cp xray-client.py "$BUILD_DIR/"
-cp web-ui.py "$BUILD_DIR/"
+cp tui.py "$BUILD_DIR/"
 
 # 如果存在预编译可执行文件则一并打包
 if [ -f "dist/xray-client" ]; then
     echo "包含预编译可执行文件..."
     cp dist/xray-client "$BUILD_DIR/"
-    cp dist/xray-webui "$BUILD_DIR/" 2>/dev/null || true
+    cp dist/xray-tui "$BUILD_DIR/" 2>/dev/null || true
     echo -e "${GREEN}✓ 已包含可执行文件（目标机器无需 Python）${NC}"
 else
     echo -e "${YELLOW}未找到预编译可执行文件，离线包将使用 Python 脚本模式${NC}"

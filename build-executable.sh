@@ -30,7 +30,7 @@ fi
 
 # 确保依赖已安装
 echo -e "${YELLOW}安装 Python 依赖...${NC}"
-python3 -m pip install pyyaml flask
+python3 -m pip install pyyaml
 
 BUILD_DIR="dist"
 mkdir -p "$BUILD_DIR"
@@ -48,24 +48,22 @@ python3 -m PyInstaller \
     xray-client.py
 
 echo ""
-echo -e "${YELLOW}构建 xray-webui...${NC}"
+echo -e "${YELLOW}构建 xray-tui...${NC}"
 python3 -m PyInstaller \
     --onefile \
-    --name xray-webui \
+    --name xray-tui \
     --clean \
     --noconfirm \
     --strip \
     --hidden-import yaml \
-    --hidden-import flask \
-    --collect-all flask \
-    web-ui.py
+    tui.py
 
 echo ""
 echo -e "${GREEN}构建完成!${NC}"
 echo ""
 echo "生成的文件:"
-ls -lh dist/xray-client dist/xray-webui
+ls -lh dist/xray-client dist/xray-tui
 echo ""
 echo "可直接复制到目标机器使用:"
 echo "  cp dist/xray-client /usr/local/bin/"
-echo "  cp dist/xray-webui /usr/local/bin/"
+echo "  cp dist/xray-tui /usr/local/bin/"

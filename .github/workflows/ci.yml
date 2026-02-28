@@ -35,10 +35,10 @@ jobs:
       run: pip install ruff
 
     - name: Ruff check (lint)
-      run: ruff check xray-client.py web-ui.py
+      run: ruff check xray-client.py tui.py
 
     - name: Ruff format (check)
-      run: ruff format --check xray-client.py web-ui.py
+      run: ruff format --check xray-client.py tui.py
 
   test-install:
     name: Test Installation
@@ -67,12 +67,12 @@ jobs:
         python-version: '3.9'
 
     - name: Install dependencies
-      run: pip install pyyaml flask
+      run: pip install pyyaml
 
     - name: Verify Python scripts can be imported
       run: |
         python -c "import ast; ast.parse(open('xray-client.py').read())"
-        python -c "import ast; ast.parse(open('web-ui.py').read())"
+        python -c "import ast; ast.parse(open('tui.py').read())"
 
   build-executable:
     name: Build Executable (x86_64)
@@ -86,7 +86,7 @@ jobs:
         python-version: '3.11'
 
     - name: Install dependencies
-      run: pip install pyinstaller pyyaml flask
+      run: pip install pyinstaller pyyaml
 
     - name: Build executables
       run: |
@@ -94,14 +94,12 @@ jobs:
           --hidden-import yaml \
           xray-client.py
 
-        pyinstaller --onefile --name xray-webui --clean --noconfirm --strip \
+        pyinstaller --onefile --name xray-tui --clean --noconfirm --strip \
           --hidden-import yaml \
-          --hidden-import flask \
-          --collect-all flask \
-          web-ui.py
+          tui.py
 
     - name: Verify executables
       run: |
         test -f dist/xray-client && echo "xray-client OK"
-        test -f dist/xray-webui && echo "xray-webui OK"
+        test -f dist/xray-tui && echo "xray-tui OK"
         dist/xray-client --help || true
