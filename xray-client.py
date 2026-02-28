@@ -69,6 +69,25 @@ def _resolve_executable(name):
     return path
 
 
+def _clean_subprocess_env():
+    """Return an env dict safe for spawning system binaries from a PyInstaller bundle.
+
+    PyInstaller prepends its extraction temp dir to LD_LIBRARY_PATH so the
+    bundled shared libraries are found.  System binaries (e.g. systemctl)
+    inherit that path and may load the wrong libcrypto.so.3, causing errors
+    like 'version OPENSSL_3.4.0 not found'.  PyInstaller saves the original
+    value in LD_LIBRARY_PATH_ORIG; this function restores it.
+    """
+    env = os.environ.copy()
+    orig = env.pop("LD_LIBRARY_PATH_ORIG", None)
+    if orig is not None:
+        if orig:
+            env["LD_LIBRARY_PATH"] = orig
+        else:
+            env.pop("LD_LIBRARY_PATH", None)
+    return env
+
+
 class XrayClient:
     def __init__(self):
         self.subscriptions = []
@@ -103,7 +122,7 @@ class XrayClient:
         if self.generate_config():
             # 使用 USR1 信号触发 Xray 热重载
             try:
-                subprocess.run(["killall", "-USR1", "xray"], check=False)
+                subprocess.run(["killall", "-USR1", "xray"], check=False, env=_clean_subprocess_env())
                 logger.info("Xray 热重载完成")
             except Exception as e:
                 logger.warning(f"热重载失败，尝试正常重启: {e}")
@@ -885,7 +904,7 @@ class XrayClient:
         with open(XRAY_CONFIG, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
 
-        subprocess.run([_resolve_executable("chmod"), "644", XRAY_CONFIG], check=False)
+        subprocess.run([_resolve_executable("chmod"), "644", XRAY_CONFIG], check=False, env=_clean_subprocess_env())
 
         logger.info(f"配置文件已保存: {XRAY_CONFIG}")
         return True
@@ -902,6 +921,7 @@ class XrayClient:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 universal_newlines=True,
+                env=_clean_subprocess_env(),
             )
             if result.returncode == 0:
                 logger.info("Xray 热重载成功")
@@ -921,6 +941,7 @@ class XrayClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
+            env=_clean_subprocess_env(),
         )
         if result.returncode == 0:
             logger.info("Xray 服务已启动")
@@ -932,7 +953,7 @@ class XrayClient:
     def stop_xray(self):
         """停止 Xray 服务"""
         logger.info("停止 Xray 服务...")
-        subprocess.run([_resolve_executable("systemctl"), "stop", "xray"], check=False)
+        subprocess.run([_resolve_executable("systemctl"), "stop", "xray"], check=False, env=_clean_subprocess_env())
         logger.info("Xray 服务已停止")
 
     def restart_xray(self):
@@ -943,6 +964,7 @@ class XrayClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
+            env=_clean_subprocess_env(),
         )
         if result.returncode == 0:
             logger.info("Xray 服务已重启")
@@ -953,7 +975,7 @@ class XrayClient:
 
     def status_xray(self):
         """查看 Xray 状态"""
-        subprocess.run([_resolve_executable("systemctl"), "status", "xray"])
+        subprocess.run([_resolve_executable("systemctl"), "status", "xray"], env=_clean_subprocess_env())
 
     def list_nodes(self):
         """列出所有节点"""
@@ -1016,17 +1038,19 @@ class XrayClient:
             "# Sourced automatically by new bash/sh sessions.\n"
             "# proxy-on / proxy-off apply changes to the CURRENT shell without manual sourcing.\n"
             "proxy-on() {\n"
-            "    sudo xray-client proxy-on \"$@\" && . /etc/profile.d/xray-proxy.sh\n"
+            '    sudo xray-client proxy-on "$@" && . /etc/profile.d/xray-proxy.sh\n'
             "}\n"
             "proxy-off() {\n"
-            "    sudo xray-client proxy-off \"$@\" && \\\n"
+            '    sudo xray-client proxy-off "$@" && \\\n'
             "        unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy no_proxy NO_PROXY\n"
             "}\n"
         )
         os.makedirs(os.path.dirname(PROXY_FUNCTIONS_FILE), exist_ok=True)
         with open(PROXY_FUNCTIONS_FILE, "w", encoding="utf-8") as f:
             f.write(content)
-        subprocess.run([_resolve_executable("chmod"), "644", PROXY_FUNCTIONS_FILE], check=False)
+        subprocess.run(
+            [_resolve_executable("chmod"), "644", PROXY_FUNCTIONS_FILE], check=False, env=_clean_subprocess_env()
+        )
 
     def enable_proxy(self):
         """开启系统 HTTP/HTTPS 代理环境变量"""
@@ -1045,7 +1069,9 @@ class XrayClient:
             os.makedirs(os.path.dirname(PROXY_PROFILE), exist_ok=True)
             with open(PROXY_PROFILE, "w", encoding="utf-8") as f:
                 f.write(content)
-            subprocess.run([_resolve_executable("chmod"), "644", PROXY_PROFILE], check=False)
+            subprocess.run(
+                [_resolve_executable("chmod"), "644", PROXY_PROFILE], check=False, env=_clean_subprocess_env()
+            )
             print("系统代理已开启")
             print(f"  HTTP  代理: http://127.0.0.1:{self.local_http_port}")
             print(f"  SOCKS 代理: socks5://127.0.0.1:{self.local_socks_port}")
@@ -1075,7 +1101,9 @@ class XrayClient:
     def _run_iptables(self, *args):
         """执行 iptables 命令，返回 CompletedProcess"""
         cmd = [_resolve_executable("iptables")] + list(args)
-        return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        return subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, env=_clean_subprocess_env()
+        )
 
     def _get_xray_uid(self):
         """获取 Xray 进程运行的 UID，用于 iptables 豁免，避免透明代理回环"""
@@ -1088,6 +1116,7 @@ class XrayClient:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 universal_newlines=True,
+                env=_clean_subprocess_env(),
             )
             xray_user = result.stdout.strip()
             if xray_user:
@@ -1097,7 +1126,9 @@ class XrayClient:
 
         # 备选：从运行中的 xray 进程读取 UID
         try:
-            result = subprocess.run(["pgrep", "-x", "xray"], stdout=subprocess.PIPE, universal_newlines=True)
+            result = subprocess.run(
+                ["pgrep", "-x", "xray"], stdout=subprocess.PIPE, universal_newlines=True, env=_clean_subprocess_env()
+            )
             pid = result.stdout.strip().split("\n")[0]
             if pid:
                 with open(f"/proc/{pid}/status") as f:
@@ -1363,6 +1394,7 @@ def main():
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
+            env=_clean_subprocess_env(),
         )
         if result.stdout.strip() == "200":
             print("代理连接成功! HTTP 状态码: 200")
