@@ -35,10 +35,10 @@ jobs:
       run: pip install ruff
 
     - name: Ruff check (lint)
-      run: ruff check xray-client.py tui.py
+      run: ruff check xray-client.py
 
     - name: Ruff format (check)
-      run: ruff format --check xray-client.py tui.py
+      run: ruff format --check xray-client.py
 
   test-install:
     name: Test Installation
@@ -72,7 +72,6 @@ jobs:
     - name: Verify Python scripts can be imported
       run: |
         python -c "import ast; ast.parse(open('xray-client.py').read())"
-        python -c "import ast; ast.parse(open('tui.py').read())"
 
   build-executable:
     name: Build Executable (x86_64)
@@ -94,12 +93,7 @@ jobs:
           --hidden-import yaml \
           xray-client.py
 
-        pyinstaller --onefile --name xray-tui --clean --noconfirm --strip \
-          --hidden-import yaml \
-          tui.py
-
     - name: Verify executables
       run: |
         test -f dist/xray-client && echo "xray-client OK"
-        test -f dist/xray-tui && echo "xray-tui OK"
         dist/xray-client --help || true

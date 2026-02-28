@@ -76,16 +76,14 @@ curl https://www.google.com
 
 ### Method 1: Download from GitHub Releases (No Python required)
 
-Pre-built standalone binaries (`xray-client` and `xray-tui`) are available on the [GitHub Releases](https://github.com/sivdead/xray-client/releases) page. They bundle all Python dependencies and run on any Linux x86_64 system without requiring Python.
+Pre-built standalone binary (`xray-client`) is available on the [GitHub Releases](https://github.com/sivdead/xray-client/releases) page. It bundles all Python dependencies (including TUI) and runs on any Linux x86_64 system without requiring Python.
 
 ```bash
-# Download the latest release (replace vX.Y.Z with the actual version)
+# Download the latest release
 curl -fsSL -L -o xray-client https://github.com/sivdead/xray-client/releases/latest/download/xray-client
-curl -fsSL -L -o xray-tui    https://github.com/sivdead/xray-client/releases/latest/download/xray-tui
 
 # Install to system path
 sudo install -m 755 xray-client /usr/local/bin/xray-client
-sudo install -m 755 xray-tui    /usr/local/bin/xray-tui
 ```
 
 Then proceed with [Configuration](#%EF%B8%8F-configuration) and run `sudo xray-client update` to get started.
@@ -242,7 +240,7 @@ Interactive terminal interface for node management:
 
 ```bash
 # Launch TUI
-sudo xray-tui
+sudo xray-client tui
 ```
 
 Keyboard shortcuts:

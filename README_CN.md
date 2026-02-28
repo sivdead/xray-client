@@ -78,16 +78,14 @@ source /etc/profile.d/xray-proxy.sh
 
 ### 方式一：从 GitHub Release 下载预编译可执行文件（无需 Python）
 
-[GitHub Releases](https://github.com/sivdead/xray-client/releases) 页面提供已打包的独立可执行文件（`xray-client` 和 `xray-tui`），内置所有 Python 依赖，无需在目标机器上安装 Python，直接可用。
+[GitHub Releases](https://github.com/sivdead/xray-client/releases) 页面提供已打包的独立可执行文件（`xray-client`），内置所有 Python 依赖（含 TUI），无需在目标机器上安装 Python，直接可用。
 
 ```bash
 # 下载最新版本的可执行文件
 curl -fsSL -L -o xray-client https://github.com/sivdead/xray-client/releases/latest/download/xray-client
-curl -fsSL -L -o xray-tui    https://github.com/sivdead/xray-client/releases/latest/download/xray-tui
 
 # 安装到系统路径
 sudo install -m 755 xray-client /usr/local/bin/xray-client
-sudo install -m 755 xray-tui    /usr/local/bin/xray-tui
 ```
 
 安装完成后，参考[配置说明](#%EF%B8%8F-配置说明)完成配置，然后运行 `sudo xray-client update` 即可开始使用。
@@ -327,7 +325,7 @@ systemctl daemon-reload && systemctl restart docker
 
 ```bash
 # 启动 TUI
-sudo xray-tui
+sudo xray-client tui
 ```
 
 快捷键：
