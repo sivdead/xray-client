@@ -19,6 +19,10 @@ A lightweight Xray client with JustMySocks subscription support for TencentOS, C
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
 - [Installation](#installation)
+  - [Method 1: Download from GitHub Releases (No Python required)](#method-1-download-from-github-releases-no-python-required)
+  - [Method 2: Online Installation](#method-2-online-installation)
+  - [Method 3: Interactive Quick Install](#method-3-interactive-quick-install)
+  - [Method 4: Offline Installation](#method-4-offline-installation)
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [TUI](#%EF%B8%8F-tui)
@@ -70,7 +74,25 @@ curl https://www.google.com
 
 ## 📦 Installation
 
-### Method 1: Online Installation (Recommended)
+### Method 1: Download from GitHub Releases (No Python required)
+
+Pre-built standalone binaries (`xray-client` and `xray-tui`) are available on the [GitHub Releases](https://github.com/sivdead/xray-client/releases) page. They bundle all Python dependencies and run on any Linux x86_64 system without requiring Python.
+
+```bash
+# Download the latest release (replace vX.Y.Z with the actual version)
+curl -fsSL -L -o xray-client https://github.com/sivdead/xray-client/releases/latest/download/xray-client
+curl -fsSL -L -o xray-tui    https://github.com/sivdead/xray-client/releases/latest/download/xray-tui
+
+# Install to system path
+sudo install -m 755 xray-client /usr/local/bin/xray-client
+sudo install -m 755 xray-tui    /usr/local/bin/xray-tui
+```
+
+Then proceed with [Configuration](#%EF%B8%8F-configuration) and run `sudo xray-client update` to get started.
+
+> **Tip:** For servers in China, you can use a mirror or download via a machine with proxy access and then scp the binaries to the target server.
+
+### Method 2: Online Installation
 
 ```bash
 # Using jsDelivr CDN (faster in China)
@@ -89,7 +111,7 @@ The installer will:
 4. Set up systemd services
 5. Configure auto-update timer
 
-### Method 2: Interactive Quick Install
+### Method 3: Interactive Quick Install
 
 ```bash
 curl -fsSL -o quick-install.sh https://cdn.jsdelivr.net/gh/sivdead/xray-client@master/quick-install.sh
@@ -98,7 +120,7 @@ sudo bash quick-install.sh
 
 This will prompt you for subscription URL and ports.
 
-### Method 3: Offline Installation
+### Method 4: Offline Installation
 
 For servers without internet access:
 
