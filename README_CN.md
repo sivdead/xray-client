@@ -1,5 +1,7 @@
 # Xray Client for Linux
 
+[English](README.md) | **中文**
+
 一个轻量级的 Xray 客户端，支持 JustMySocks 订阅，适用于 TencentOS、CentOS、RHEL、Ubuntu、Debian 等 Linux 系统。
 
 **功能特性**:
@@ -411,7 +413,3 @@ sudo systemctl daemon-reload
 - [Xray-core](https://github.com/XTLS/Xray-core)
 - [Xray-install](https://github.com/XTLS/Xray-install) — 官方安装脚本
 - [JustMySocks](https://justmysocks.net/)
-
----
-
-For English documentation, see [README.md](README.md).

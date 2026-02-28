@@ -1,5 +1,7 @@
 # Xray Client for Linux
 
+**English** | [中文](README_CN.md)
+
 A lightweight Xray client with JustMySocks subscription support for TencentOS, CentOS, RHEL, Ubuntu, and Debian.
 
 **Key Features**:
@@ -438,9 +440,3 @@ Pull requests are welcome! For major changes, please open an issue first.
 - [Xray-core](https://github.com/XTLS/Xray-core)
 - [Xray-install](https://github.com/XTLS/Xray-install) - Official install script
 - [JustMySocks](https://justmysocks.net/)
-
----
-
-## 🇨🇳 中文版
-
-For Chinese documentation, see [README_CN.md](README_CN.md).
