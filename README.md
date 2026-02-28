@@ -1,5 +1,7 @@
 # Xray Client for Linux
 
+**English** | [中文](README_CN.md)
+
 A lightweight Xray client with JustMySocks subscription support for TencentOS, CentOS, RHEL, Ubuntu, and Debian.
 
 **Key Features**:
@@ -7,7 +9,7 @@ A lightweight Xray client with JustMySocks subscription support for TencentOS, C
 - Multi-protocol support: VMess, VLESS, Shadowsocks, Trojan
 - Clash subscription format support
 - Auto node selection based on latency
-- Web UI for easy management
+- TUI (Terminal UI) for interactive management
 - Docker support
 - Systemd integration
 
@@ -19,7 +21,7 @@ A lightweight Xray client with JustMySocks subscription support for TencentOS, C
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Usage](#usage)
-- [Web UI](#web-ui)
+- [TUI](#%EF%B8%8F-tui)
 - [Docker](#docker)
 - [Proxy Settings](#proxy-settings)
 - [Troubleshooting](#troubleshooting)
@@ -32,7 +34,7 @@ A lightweight Xray client with JustMySocks subscription support for TencentOS, C
 - ✅ **JustMySocks Subscription** - Auto-updates subscription links
 - ✅ **Multi-Protocol Support** - VMess, VLESS, Shadowsocks, Trojan
 - ✅ **Clash Format** - Supports Clash YAML subscription format
-- ✅ **Web Management UI** - Browser-based node management
+- ✅ **TUI Management** - Interactive terminal UI for node management
 - ✅ **Auto Node Selection** - Tests latency and auto-selects best node
 - ✅ **Scheduled Updates** - Systemd timer for daily subscription updates
 - ✅ **Hot Reload** - Reload config without restarting service
@@ -212,27 +214,31 @@ sudo journalctl -u xray -f
 sudo tail -f /var/log/xray/error.log
 ```
 
-## 🌐 Web UI
+## 🖥️ TUI
 
-Optional web interface for browser-based management:
+Interactive terminal interface for node management:
 
 ```bash
-# Install Flask
-sudo pip3 install flask pyyaml
-
-# Start Web UI
-cd /root/xray-client
-sudo python3 web-ui.py
-
-# Access via browser
-# http://your-server-ip:5000
+# Launch TUI
+sudo xray-tui
 ```
 
+Keyboard shortcuts:
+- `↑`/`↓` or `j`/`k` — Navigate nodes
+- `Enter` — Select node and apply
+- `u` — Update subscription
+- `r` — Restart Xray service
+- `t` — Test node latency
+- `a` — Auto-select best node
+- `p` — Test proxy connection
+- `l` / `F5` — Refresh data
+- `q` — Quit
+
 Features:
-- View all nodes
-- Switch nodes with one click
-- Update subscription
-- View service status
+- Real-time service status display
+- Color-coded protocol types (VMess, VLESS, Shadowsocks, Trojan)
+- Node list with scrolling
+- Background operations (non-blocking UI)
 
 ## 🐳 Docker
 
@@ -247,15 +253,6 @@ docker run -d \
   -p 10809:10809 \
   sivdead/xray-client
 
-# With Web UI enabled
-docker run -d \
-  --name xray-client \
-  -e SUB_URL=https://your-subscription-url \
-  -e WEB_UI=true \
-  -p 10808:10808 \
-  -p 10809:10809 \
-  -p 5000:5000 \
-  sivdead/xray-client
 ```
 
 ### Build Your Own Image
@@ -443,9 +440,3 @@ Pull requests are welcome! For major changes, please open an issue first.
 - [Xray-core](https://github.com/XTLS/Xray-core)
 - [Xray-install](https://github.com/XTLS/Xray-install) - Official install script
 - [JustMySocks](https://justmysocks.net/)
-
----
-
-## 🇨🇳 中文版
-
-For Chinese documentation, see [README_CN.md](README_CN.md).

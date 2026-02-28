@@ -54,7 +54,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install pyinstaller pyyaml flask
+        pip install pyinstaller pyyaml
 
     - name: Build executables (native x86_64)
       if: matrix.arch == 'x86_64'
@@ -64,12 +64,10 @@ jobs:
           --hidden-import yaml \
           xray-client.py
 
-        # Build xray-webui
-        pyinstaller --onefile --name xray-webui --clean --noconfirm --strip \
+        # Build xray-tui
+        pyinstaller --onefile --name xray-tui --clean --noconfirm --strip \
           --hidden-import yaml \
-          --hidden-import flask \
-          --collect-all flask \
-          web-ui.py
+          tui.py
 
     - name: Build executables (cross-compile aarch64)
       if: matrix.arch == 'aarch64'
@@ -81,19 +79,17 @@ jobs:
         run: |
           apt-get update && apt-get install -y python3 python3-pip python3-venv
           python3 -m venv /tmp/build-venv
-          /tmp/build-venv/bin/pip install pyinstaller pyyaml flask
+          /tmp/build-venv/bin/pip install pyinstaller pyyaml
 
           # Build xray-client
           /tmp/build-venv/bin/pyinstaller --onefile --name xray-client --clean --noconfirm --strip \
             --hidden-import yaml \
             xray-client.py
 
-          # Build xray-webui
-          /tmp/build-venv/bin/pyinstaller --onefile --name xray-webui --clean --noconfirm --strip \
+          # Build xray-tui
+          /tmp/build-venv/bin/pyinstaller --onefile --name xray-tui --clean --noconfirm --strip \
             --hidden-import yaml \
-            --hidden-import flask \
-            --collect-all flask \
-            web-ui.py
+            tui.py
 
     - name: Upload executables
       uses: actions/upload-artifact@v4
@@ -101,7 +97,7 @@ jobs:
         name: executables-${{ matrix.arch }}
         path: |
           dist/xray-client
-          dist/xray-webui
+          dist/xray-tui
 
   build-offline-package:
     name: Build Offline Package
@@ -172,12 +168,12 @@ jobs:
 
         # Copy pre-built executables (no Python needed on target)
         cp artifacts/executables-x86_64/xray-client xray-client-offline/
-        cp artifacts/executables-x86_64/xray-webui xray-client-offline/
-        chmod +x xray-client-offline/xray-client xray-client-offline/xray-webui
+        cp artifacts/executables-x86_64/xray-tui xray-client-offline/
+        chmod +x xray-client-offline/xray-client xray-client-offline/xray-tui
 
         # Also include Python sources as fallback
         cp xray-client.py xray-client-offline/
-        cp web-ui.py xray-client-offline/
+        cp tui.py xray-client-offline/
 
         # Copy Xray (x64)
         unzip -q offline-package/Xray-linux-64.zip -d temp_xray
@@ -256,12 +252,12 @@ jobs:
 
         # Copy pre-built executables
         cp artifacts/executables-aarch64/xray-client xray-client-offline/
-        cp artifacts/executables-aarch64/xray-webui xray-client-offline/
-        chmod +x xray-client-offline/xray-client xray-client-offline/xray-webui
+        cp artifacts/executables-aarch64/xray-tui xray-client-offline/
+        chmod +x xray-client-offline/xray-client xray-client-offline/xray-tui
 
         # Also include Python sources as fallback
         cp xray-client.py xray-client-offline/
-        cp web-ui.py xray-client-offline/
+        cp tui.py xray-client-offline/
 
         # Copy Xray (arm64)
         unzip -q offline-package/Xray-linux-arm64-v8a.zip -d temp_xray
@@ -337,9 +333,9 @@ jobs:
     - name: Rename executables with architecture suffix
       run: |
         cp artifacts/executables-x86_64/xray-client xray-client-x86_64
-        cp artifacts/executables-x86_64/xray-webui xray-webui-x86_64
+        cp artifacts/executables-x86_64/xray-tui xray-tui-x86_64
         cp artifacts/executables-aarch64/xray-client xray-client-aarch64
-        cp artifacts/executables-aarch64/xray-webui xray-webui-aarch64
+        cp artifacts/executables-aarch64/xray-tui xray-tui-aarch64
 
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
@@ -350,16 +346,16 @@ jobs:
           xray-client-offline-x86_64.tar.gz
           xray-client-offline-aarch64.tar.gz
           xray-client-x86_64
-          xray-webui-x86_64
+          xray-tui-x86_64
           xray-client-aarch64
-          xray-webui-aarch64
+          xray-tui-aarch64
         body: |
           ## Xray Client ${{ env.RELEASE_VERSION }}
 
           ### 独立可执行文件（推荐）
-          下载对应架构的 `xray-client` 和 `xray-webui` 可直接运行，无需安装 Python 环境。
-          - x86_64: `xray-client-x86_64` / `xray-webui-x86_64`
-          - aarch64: `xray-client-aarch64` / `xray-webui-aarch64`
+          下载对应架构的 `xray-client` 和 `xray-tui` 可直接运行，无需安装 Python 环境。
+          - x86_64: `xray-client-x86_64` / `xray-tui-x86_64`
+          - aarch64: `xray-client-aarch64` / `xray-tui-aarch64`
 
           ### 离线安装包
           - `xray-client-offline-x86_64.tar.gz` - x86_64 架构离线包

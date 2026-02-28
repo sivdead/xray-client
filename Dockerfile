@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     iproute2 \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir flask pyyaml
+    && pip install --no-cache-dir pyyaml
 
 # 下载并安装 Xray（使用 latest 自动获取最新版）
 ARG XRAY_VERSION=latest
@@ -48,21 +48,19 @@ RUN mkdir -p /etc/xray-client/subscription \
 
 # 复制脚本
 COPY xray-client.py /usr/local/bin/xray-client
-COPY web-ui.py /usr/local/bin/xray-webui
+COPY tui.py /usr/local/bin/xray-tui
 COPY docker-entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /usr/local/bin/xray-client /usr/local/bin/xray-webui /entrypoint.sh
+RUN chmod +x /usr/local/bin/xray-client /usr/local/bin/xray-tui /entrypoint.sh
 
 # 环境变量
 ENV SUB_URL=""
 ENV NODE_INDEX=0
 ENV SOCKS_PORT=10808
 ENV HTTP_PORT=10809
-ENV WEB_UI=false
-ENV WEB_UI_PORT=5000
 
 # 暴露端口
-EXPOSE 10808/tcp 10809/tcp 5000/tcp
+EXPOSE 10808/tcp 10809/tcp
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \

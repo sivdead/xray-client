@@ -25,12 +25,6 @@ EOF
     xray-client select -i ${NODE_INDEX:-0} || true
 fi
 
-# 启动 Web UI（如果启用）
-if [ "$WEB_UI" = "true" ]; then
-    echo "Starting Web UI on port ${WEB_UI_PORT:-5000}..."
-    python3 /usr/local/bin/xray-webui &
-fi
-
 # 前台启动 Xray
 echo "Starting Xray..."
 exec /usr/local/bin/xray run -config /usr/local/etc/xray/config.json

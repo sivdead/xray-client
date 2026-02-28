@@ -5,7 +5,6 @@ description = "Lightweight Linux proxy client with JustMySocks subscription supp
 requires-python = ">=3.9"
 dependencies = [
     "pyyaml",
-    "flask",
 ]
 
 [project.optional-dependencies]
