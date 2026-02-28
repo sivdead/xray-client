@@ -91,6 +91,7 @@ jobs:
       run: |
         pyinstaller --onefile --name xray-client --clean --noconfirm --strip \
           --hidden-import yaml \
+          --hidden-import curses \
           xray-client.py
 
     - name: Verify executables

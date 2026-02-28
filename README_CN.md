@@ -81,8 +81,11 @@ source /etc/profile.d/xray-proxy.sh
 [GitHub Releases](https://github.com/sivdead/xray-client/releases) 页面提供已打包的独立可执行文件（`xray-client`），内置所有 Python 依赖（含 TUI），无需在目标机器上安装 Python，直接可用。
 
 ```bash
-# 下载最新版本的可执行文件
-curl -fsSL -L -o xray-client https://github.com/sivdead/xray-client/releases/latest/download/xray-client
+# 下载最新版本的可执行文件（x86_64）
+curl -fsSL -L -o xray-client https://github.com/sivdead/xray-client/releases/latest/download/xray-client-x86_64
+
+# ARM64 (aarch64) 服务器请使用：
+# curl -fsSL -L -o xray-client https://github.com/sivdead/xray-client/releases/latest/download/xray-client-aarch64
 
 # 安装到系统路径
 sudo install -m 755 xray-client /usr/local/bin/xray-client

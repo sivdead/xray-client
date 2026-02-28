@@ -6,6 +6,7 @@ Xray Client - 支持 JustMySocks 订阅
 """
 
 import os
+import sys
 import json
 import base64
 import urllib.request
@@ -1279,6 +1280,7 @@ def _tui_get_xray_status():
             stderr=subprocess.PIPE,
             universal_newlines=True,
             timeout=5,
+            env=_clean_subprocess_env(),
         )
         return result.stdout.strip()
     except Exception:
@@ -1306,13 +1308,18 @@ def _tui_file_mtime(path):
 def _tui_run_command(args, timeout=120):
     """运行 xray-client 命令并捕获输出（调用自身）"""
     try:
-        cmd = [_resolve_executable("xray-client")] + args
+        exe = os.path.realpath(sys.argv[0])
+        if exe.endswith(".py"):
+            cmd = [sys.executable, exe] + args
+        else:
+            cmd = [exe] + args
         result = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
             timeout=timeout,
+            env=_clean_subprocess_env(),
         )
         output = result.stdout + result.stderr
         return result.returncode == 0, output.strip()
@@ -1848,7 +1855,13 @@ def _run_tui():
     """启动 TUI 交互界面"""
     import curses
 
-    locale.setlocale(locale.LC_ALL, "")
+    try:
+        locale.setlocale(locale.LC_ALL, "")
+    except locale.Error:
+        try:
+            locale.setlocale(locale.LC_ALL, "C.UTF-8")
+        except locale.Error:
+            locale.setlocale(locale.LC_ALL, "C")
 
     def _run(stdscr):
         tui = _TUI(stdscr)

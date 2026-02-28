@@ -76,11 +76,14 @@ curl https://www.google.com
 
 ### Method 1: Download from GitHub Releases (No Python required)
 
-Pre-built standalone binary (`xray-client`) is available on the [GitHub Releases](https://github.com/sivdead/xray-client/releases) page. It bundles all Python dependencies (including TUI) and runs on any Linux x86_64 system without requiring Python.
+Pre-built standalone binary (`xray-client`) is available on the [GitHub Releases](https://github.com/sivdead/xray-client/releases) page. It bundles all Python dependencies (including TUI) and runs on any Linux system without requiring Python.
 
 ```bash
-# Download the latest release
-curl -fsSL -L -o xray-client https://github.com/sivdead/xray-client/releases/latest/download/xray-client
+# Download the latest release (x86_64)
+curl -fsSL -L -o xray-client https://github.com/sivdead/xray-client/releases/latest/download/xray-client-x86_64
+
+# For ARM64 (aarch64) servers, use:
+# curl -fsSL -L -o xray-client https://github.com/sivdead/xray-client/releases/latest/download/xray-client-aarch64
 
 # Install to system path
 sudo install -m 755 xray-client /usr/local/bin/xray-client
