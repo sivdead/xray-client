@@ -114,7 +114,18 @@ jobs:
     - name: Get Xray Latest Version
       id: get_version
       run: |
-        latest=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        for attempt in 1 2 3; do
+          latest=$(curl -fsSL --max-time 30 https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -n "$latest" ]; then
+            break
+          fi
+          echo "Attempt $attempt: got empty version, retrying..."
+          sleep $((attempt * 2))
+        done
+        if [ -z "$latest" ]; then
+          echo "::error::Failed to fetch Xray latest version after 3 attempts"
+          exit 1
+        fi
         echo "version=$latest" >> $GITHUB_OUTPUT
         echo "Xray Latest Version: $latest"
 
@@ -123,18 +134,44 @@ jobs:
         VERSION=${{ steps.get_version.outputs.version }}
         mkdir -p offline-package
 
-        # Download multiple architectures
+        download_and_verify() {
+          local arch="$1"
+          local out="offline-package/${arch}.zip"
+          local urls=(
+            "https://github.com/XTLS/Xray-core/releases/download/${VERSION}/${arch}.zip"
+            "https://objects.githubusercontent.com/github-production-release-asset-2e65be/XTLS/Xray-core/${arch}.zip"
+          )
+
+          for attempt in 1 2 3; do
+            for url in "${urls[@]}"; do
+              echo "Attempt $attempt: downloading $arch from $url ..."
+              if curl -fsSL --max-time 120 --retry 2 -o "$out" "$url"; then
+                # Verify it's a valid zip (not an HTML error page)
+                min_size=1048576  # 1 MB sanity check
+                actual_size=$(stat -c%s "$out" 2>/dev/null || echo 0)
+                if [ "$actual_size" -lt "$min_size" ]; then
+                  echo "Downloaded file too small (${actual_size} bytes), likely not a real zip"
+                  rm -f "$out"
+                  continue
+                fi
+                if unzip -t "$out" > /dev/null 2>&1; then
+                  echo "Downloaded and verified $arch (${actual_size} bytes)"
+                  return 0
+                else
+                  echo "Zip integrity check failed for $arch, retrying..."
+                  rm -f "$out"
+                fi
+              fi
+            done
+            [ $attempt -lt 3 ] && sleep $((attempt * 5))
+          done
+
+          echo "::error::Failed to download a valid zip for $arch after 3 attempts"
+          return 1
+        }
+
         for arch in Xray-linux-64 Xray-linux-arm64-v8a; do
-          echo "Downloading $arch..."
-          if ! curl -fsSL -o "offline-package/${arch}.zip" \
-            "https://github.com/XTLS/Xray-core/releases/download/${VERSION}/${arch}.zip"; then
-            echo "Direct download failed for $arch, trying mirror..."
-            if ! curl -fsSL -o "offline-package/${arch}.zip" \
-              "https://ghproxy.com/https://github.com/XTLS/Xray-core/releases/download/${VERSION}/${arch}.zip"; then
-              echo "::error::Failed to download $arch from both direct and mirror sources"
-              exit 1
-            fi
-          fi
+          download_and_verify "$arch"
         done
 
     - name: Download GeoData
