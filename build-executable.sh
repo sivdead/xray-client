@@ -35,9 +35,9 @@ python3 -m pip install pyyaml
 BUILD_DIR="dist"
 mkdir -p "$BUILD_DIR"
 
-# 构建 xray-client
+# 构建 xray-client（已包含 TUI，通过 xray-client tui 启动）
 echo ""
-echo -e "${YELLOW}构建 xray-client...${NC}"
+echo -e "${YELLOW}构建 xray-client（含 TUI）...${NC}"
 python3 -m PyInstaller \
     --onefile \
     --name xray-client \
@@ -45,25 +45,17 @@ python3 -m PyInstaller \
     --noconfirm \
     --strip \
     --hidden-import yaml \
+    --hidden-import curses \
     xray-client.py
-
-echo ""
-echo -e "${YELLOW}构建 xray-tui...${NC}"
-python3 -m PyInstaller \
-    --onefile \
-    --name xray-tui \
-    --clean \
-    --noconfirm \
-    --strip \
-    --hidden-import yaml \
-    tui.py
 
 echo ""
 echo -e "${GREEN}构建完成!${NC}"
 echo ""
 echo "生成的文件:"
-ls -lh dist/xray-client dist/xray-tui
+ls -lh dist/xray-client
 echo ""
-echo "可直接复制到目标机器使用:"
+echo "安装方式:"
 echo "  cp dist/xray-client /usr/local/bin/"
-echo "  cp dist/xray-tui /usr/local/bin/"
+echo ""
+echo "使用方式:"
+echo "  xray-client tui     # 启动终端交互界面"

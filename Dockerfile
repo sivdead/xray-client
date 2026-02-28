@@ -48,10 +48,9 @@ RUN mkdir -p /etc/xray-client/subscription \
 
 # 复制脚本
 COPY xray-client.py /usr/local/bin/xray-client
-COPY tui.py /usr/local/bin/xray-tui
 COPY docker-entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /usr/local/bin/xray-client /usr/local/bin/xray-tui /entrypoint.sh
+RUN chmod +x /usr/local/bin/xray-client /entrypoint.sh
 
 # 环境变量
 ENV SUB_URL=""
