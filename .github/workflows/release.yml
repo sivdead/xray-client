@@ -374,6 +374,41 @@ jobs:
         cp artifacts/executables-aarch64/xray-client xray-client-aarch64
         cp artifacts/executables-aarch64/xray-tui xray-tui-aarch64
 
+    - name: Generate release notes from git history
+      id: release_notes
+      run: |
+        TAG="${{ env.RELEASE_VERSION }}"
+        # Fetch all tags to find the previous one
+        git fetch --tags --force
+
+        # Get sorted tags (version order), find the one before current
+        PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${TAG}$" | head -n1)
+
+        if [ -n "$PREV_TAG" ]; then
+          echo "Generating changelog: ${PREV_TAG}..${TAG}"
+          COMMITS=$(git log "${PREV_TAG}..${TAG}" --pretty=format:"- %s (%h)" --no-merges)
+        else
+          echo "No previous tag found, listing all commits"
+          COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+        fi
+
+        if [ -z "$COMMITS" ]; then
+          COMMITS="- No changes recorded"
+        fi
+
+        # Write to file to preserve multiline content
+        {
+          echo "RELEASE_NOTES<<RELEASE_NOTES_EOF"
+          echo "$COMMITS"
+          echo "RELEASE_NOTES_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        echo "PREV_TAG=${PREV_TAG}" >> "$GITHUB_OUTPUT"
+
+        echo "Previous tag: ${PREV_TAG:-none}"
+        echo "---"
+        echo "$COMMITS"
+
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
@@ -388,6 +423,9 @@ jobs:
           xray-tui-aarch64
         body: |
           ## Xray Client ${{ env.RELEASE_VERSION }}
+
+          ### 更新日志
+          ${{ steps.release_notes.outputs.RELEASE_NOTES }}
 
           ### 独立可执行文件（推荐）
           下载对应架构的 `xray-client` 和 `xray-tui` 可直接运行，无需安装 Python 环境。
@@ -406,7 +444,6 @@ jobs:
           sudo bash install.sh
           ```
 
-          ### 更新日志
-          见 [CHANGELOG.md](CHANGELOG.md)
+          **完整更新日志**: https://github.com/sivdead/xray-client/compare/${{ steps.release_notes.outputs.PREV_TAG }}...${{ env.RELEASE_VERSION }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
