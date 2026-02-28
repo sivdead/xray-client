@@ -1049,7 +1049,7 @@ class XrayClient:
             print("系统代理已开启")
             print(f"  HTTP  代理: http://127.0.0.1:{self.local_http_port}")
             print(f"  SOCKS 代理: socks5://127.0.0.1:{self.local_socks_port}")
-            print(f"\n新终端自动生效；当前终端使用 proxy-on 函数或手动执行:")
+            print("\n新终端自动生效；当前终端使用 proxy-on 函数或手动执行:")
             print(f"  source {PROXY_PROFILE}")
             print("\nGUI 应用请使用 tun-on 透明代理模式。")
             return True
