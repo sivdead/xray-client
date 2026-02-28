@@ -316,23 +316,12 @@ To exclude additional addresses from the proxy, add `no_proxy` to `config.ini`:
 no_proxy = localhost,127.0.0.1,::1,10.0.0.0/8,192.168.0.0/16
 ```
 
-#### How proxy-on works — and GUI limitations
+#### GUI applications
 
-`proxy-on` writes proxy settings to two locations:
-
-| File | Read by | Takes effect |
-|------|---------|--------------|
-| `/etc/profile.d/xray-proxy.sh` | New bash/sh terminal sessions | Immediately (new terminals) |
-| `/etc/environment` | PAM (login manager, SSH, `su -`) | After **re-login** |
-
-**GUI applications** (browsers, Electron apps, etc.) launched from a desktop session
-inherit their environment from the display manager login, not from shell profile files.
-Therefore:
-
-- **Re-login** after running `proxy-on` to make GUI apps pick up `/etc/environment`.
-- Or configure the proxy in the application itself (e.g. GNOME/KDE system proxy settings).
-- Or use **`tun-on`** (transparent proxy mode below) — this is the recommended option
-  for GUI environments as it routes all traffic without any per-app or per-session config.
+`proxy-on` only sets shell environment variables, which GUI apps (browsers, Electron, etc.)
+launched from a desktop session do not inherit. For GUI use, the recommended approach is
+**`tun-on`** (transparent proxy mode below) — it routes all traffic at the iptables level
+with no per-app or per-session configuration needed.
 
 ### TUN Transparent Proxy (no per-app config needed)
 

@@ -266,22 +266,11 @@ sudo xray-client proxy-on && source /etc/profile.d/xray-proxy.sh
 no_proxy = localhost,127.0.0.1,::1,10.0.0.0/8,192.168.0.0/16
 ```
 
-#### proxy-on 的工作原理及 GUI 环境说明
+#### GUI 应用说明
 
-`proxy-on` 会将代理设置写入两个位置：
-
-| 文件 | 读取方 | 生效时机 |
-|------|--------|---------|
-| `/etc/profile.d/xray-proxy.sh` | 新建 bash/sh 终端会话 | 立即（新终端） |
-| `/etc/environment` | PAM（登录管理器、SSH、`su -`） | **重新登录**后 |
-
-**GUI 应用**（浏览器、Electron 应用等）的环境变量由桌面登录时的显示管理器决定，
-不会自动读取 `/etc/profile.d/`，因此：
-
-- 执行 `proxy-on` 后**重新登录系统**，GUI 应用才能通过 `/etc/environment` 获取代理设置。
-- 或在应用内单独配置代理（如 GNOME / KDE 系统代理设置）。
-- 或使用 **`tun-on` 透明代理模式**（推荐 GUI 用户使用），无需任何应用级或会话级配置，
-  所有流量自动经过 Xray。
+`proxy-on` 只设置 shell 环境变量，从桌面启动的 GUI 应用（浏览器、Electron 等）不会
+继承这些变量。GUI 场景推荐使用 **`tun-on` 透明代理模式**，在 iptables 层面拦截流量，
+无需任何应用级或会话级配置。
 
 ### TUN 透明代理（无需逐应用配置）
 
