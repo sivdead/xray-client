@@ -290,17 +290,23 @@ docker run -d -e SUB_URL=xxx -p 10808:10808 -p 10809:10809 xray-client
 
 ### System Proxy (HTTP/SOCKS env vars)
 
+The installer creates shell functions `proxy-on` and `proxy-off` that automatically
+apply changes to the **current terminal** — no manual `source` needed.
+
 ```bash
-# Enable — writes proxy vars to /etc/profile.d/xray-proxy.sh AND /etc/environment
-sudo xray-client proxy-on
+# First time in an existing terminal (new terminals skip this):
+source /etc/profile.d/xray-client-functions.sh
 
-# New terminals pick it up automatically. For the current terminal:
-source /etc/profile.d/xray-proxy.sh
+# Enable proxy — sets env vars AND applies them in the current shell
+proxy-on
 
-# Disable — removes both files' proxy entries
-sudo xray-client proxy-off
-# Also run in current terminal:
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy
+# Disable proxy — removes env vars AND unsets them in the current shell
+proxy-off
+```
+
+Under the hood, `proxy-on` is equivalent to:
+```bash
+sudo xray-client proxy-on && source /etc/profile.d/xray-proxy.sh
 ```
 
 To exclude additional addresses from the proxy, add `no_proxy` to `config.ini`:
@@ -429,7 +435,7 @@ bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)
 sudo rm -rf /etc/xray-client
 sudo rm -rf /var/log/xray-client
 sudo rm -f /usr/local/bin/xray-client
-sudo rm -f /etc/profile.d/xray-proxy.sh
+sudo rm -f /etc/profile.d/xray-proxy.sh /etc/profile.d/xray-client-functions.sh
 
 # Remove systemd timer
 sudo systemctl stop xray-client-update.timer

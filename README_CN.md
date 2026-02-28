@@ -241,17 +241,22 @@ sudo xray-client tun-off
 
 ### 系统代理（HTTP/SOCKS 环境变量）
 
+安装时会创建 `proxy-on` / `proxy-off` shell 函数，可以**在当前终端直接生效**，无需手动 source。
+
 ```bash
-# 一键开启 — 同时写入 /etc/profile.d/xray-proxy.sh 和 /etc/environment
-sudo xray-client proxy-on
+# 已有终端第一次使用时执行（新终端无需此步骤）：
+source /etc/profile.d/xray-client-functions.sh
 
-# 新终端自动生效；当前终端执行：
-source /etc/profile.d/xray-proxy.sh
+# 开启代理 — 设置环境变量并立即在当前 shell 生效
+proxy-on
 
-# 关闭系统代理
-sudo xray-client proxy-off
-# 当前终端同时执行：
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy
+# 关闭代理 — 清除配置文件并 unset 当前 shell 中的环境变量
+proxy-off
+```
+
+其本质等价于：
+```bash
+sudo xray-client proxy-on && source /etc/profile.d/xray-proxy.sh
 ```
 
 如需排除内网地址，在 `config.ini` 中设置：
@@ -400,7 +405,7 @@ bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)
 sudo rm -rf /etc/xray-client
 sudo rm -rf /var/log/xray-client
 sudo rm -f /usr/local/bin/xray-client
-sudo rm -f /etc/profile.d/xray-proxy.sh
+sudo rm -f /etc/profile.d/xray-proxy.sh /etc/profile.d/xray-client-functions.sh
 
 # 删除定时任务
 sudo systemctl stop xray-client-update.timer
