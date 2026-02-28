@@ -44,6 +44,7 @@ SUBSCRIPTION_FILE = os.path.join(CLIENT_CONFIG_DIR, "subscription", "nodes.json"
 INI_FILE = os.path.join(CLIENT_CONFIG_DIR, "config.ini")
 PID_FILE = "/var/run/xray-client.pid"
 PROXY_PROFILE = "/etc/profile.d/xray-proxy.sh"
+PROXY_FUNCTIONS_FILE = "/etc/profile.d/xray-client-functions.sh"
 IPTABLES_CHAIN = "XRAY"
 
 # GitHub 代理镜像列表
@@ -1007,6 +1008,26 @@ class XrayClient:
         print(f"已选择节点 [{index}]: {nodes[index]['name']}")
         return True
 
+    @staticmethod
+    def install_shell_functions() -> None:
+        """写入 /etc/profile.d/xray-client-functions.sh，提供免 source 的 proxy-on/proxy-off 壳函数。"""
+        content = (
+            "# xray-client shell convenience functions\n"
+            "# Sourced automatically by new bash/sh sessions.\n"
+            "# proxy-on / proxy-off apply changes to the CURRENT shell without manual sourcing.\n"
+            "proxy-on() {\n"
+            "    sudo xray-client proxy-on \"$@\" && . /etc/profile.d/xray-proxy.sh\n"
+            "}\n"
+            "proxy-off() {\n"
+            "    sudo xray-client proxy-off \"$@\" && \\\n"
+            "        unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy no_proxy NO_PROXY\n"
+            "}\n"
+        )
+        os.makedirs(os.path.dirname(PROXY_FUNCTIONS_FILE), exist_ok=True)
+        with open(PROXY_FUNCTIONS_FILE, "w", encoding="utf-8") as f:
+            f.write(content)
+        subprocess.run([_resolve_executable("chmod"), "644", PROXY_FUNCTIONS_FILE], check=False)
+
     def enable_proxy(self):
         """开启系统 HTTP/HTTPS 代理环境变量"""
         content = (
@@ -1028,8 +1049,9 @@ class XrayClient:
             print("系统代理已开启")
             print(f"  HTTP  代理: http://127.0.0.1:{self.local_http_port}")
             print(f"  SOCKS 代理: socks5://127.0.0.1:{self.local_socks_port}")
-            print("\n新终端将自动使用代理，当前终端请执行:")
+            print("\n新终端自动生效；当前终端使用 proxy-on 函数或手动执行:")
             print(f"  source {PROXY_PROFILE}")
+            print("\nGUI 应用请使用 tun-on 透明代理模式。")
             return True
         except Exception as e:
             logger.error(f"开启系统代理失败: {e}")
@@ -1041,7 +1063,8 @@ class XrayClient:
             try:
                 os.remove(PROXY_PROFILE)
                 print("系统代理已关闭")
-                print("当前终端请执行: unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy")
+                print("新终端自动生效；当前终端使用 proxy-off 函数或手动执行:")
+                print("  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy no_proxy NO_PROXY")
             except OSError as e:
                 logger.error(f"关闭系统代理失败: {e}")
                 return False

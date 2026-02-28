@@ -492,6 +492,22 @@ systemctl start xray-client-update.timer
 
 echo -e "${GREEN}定时更新服务已安装${NC}"
 
+# 安装 shell 便捷函数（proxy-on / proxy-off 免手动 source）
+cat > /etc/profile.d/xray-client-functions.sh << 'FUNC_EOF'
+# xray-client shell convenience functions
+# Sourced automatically by new bash/sh sessions.
+# proxy-on / proxy-off apply changes to the CURRENT shell without manual sourcing.
+proxy-on() {
+    sudo xray-client proxy-on "$@" && . /etc/profile.d/xray-proxy.sh
+}
+proxy-off() {
+    sudo xray-client proxy-off "$@" && \
+        unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy no_proxy NO_PROXY
+}
+FUNC_EOF
+chmod 644 /etc/profile.d/xray-client-functions.sh
+echo -e "${GREEN}Shell 便捷函数已安装 (proxy-on / proxy-off)${NC}"
+
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║                 安装成功!                             ║${NC}"
@@ -510,7 +526,12 @@ echo "2. 更新订阅并启动服务:"
 echo -e "   ${GREEN}xray-client update${NC}     # 更新订阅"
 echo -e "   ${GREEN}xray-client restart${NC}    # 重启 Xray 应用配置"
 echo ""
-echo "3. 其他常用命令:"
+echo "3. 开启系统代理（终端 + GUI）:"
+echo -e "   ${GREEN}source /etc/profile.d/xray-client-functions.sh${NC}  # 当前终端激活（新终端自动生效）"
+echo -e "   ${GREEN}proxy-on${NC}               # 开启代理并自动 source（无需手动 source）"
+echo -e "   ${GREEN}proxy-off${NC}              # 关闭代理并清除环境变量"
+echo ""
+echo "4. 其他常用命令:"
 echo -e "   ${GREEN}xray-client list${NC}       # 查看节点列表"
 echo -e "   ${GREEN}xray-client select -i 0${NC} # 切换到第1个节点"
 echo -e "   ${GREEN}xray-client status${NC}     # 查看 Xray 状态"
