@@ -36,10 +36,13 @@ def _resolve_executable(name):
 
 
 def load_nodes():
-    """加载节点数据"""
-    if os.path.exists(SUBSCRIPTION_FILE):
-        with open(SUBSCRIPTION_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+    """加载节点数据，文件损坏或正在写入时返回安全默认值"""
+    try:
+        if os.path.exists(SUBSCRIPTION_FILE):
+            with open(SUBSCRIPTION_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        pass
     return {"nodes": [], "update_time": "从未"}
 
 
@@ -119,6 +122,8 @@ class TUI:
 
     def __init__(self, stdscr):
         self.stdscr = stdscr
+        self._lock = threading.RLock()  # 保护跨线程共享状态
+
         self.nodes = []
         self.update_time = "从未"
         self.status = "unknown"
@@ -172,21 +177,27 @@ class TUI:
     def _refresh_data(self):
         """刷新节点数据和状态"""
         data = load_nodes()
-        self.nodes = data.get("nodes", [])
-        self.update_time = data.get("update_time", "从未")
-        self.status = get_xray_status()
-        self.selected = get_selected_node()
-        self._nodes_mtime = _file_mtime(SUBSCRIPTION_FILE)
-        self._config_mtime = _file_mtime(INI_FILE)
+        status = get_xray_status()
+        selected = get_selected_node()
+        nodes_mt = _file_mtime(SUBSCRIPTION_FILE)
+        config_mt = _file_mtime(INI_FILE)
 
-        # 修正光标范围
-        if self.nodes:
-            if self.cursor >= len(self.nodes):
-                self.cursor = len(self.nodes) - 1
-        else:
-            self.cursor = 0
+        with self._lock:
+            self.nodes = data.get("nodes", [])
+            self.update_time = data.get("update_time", "从未")
+            self.status = status
+            self.selected = selected
+            self._nodes_mtime = nodes_mt
+            self._config_mtime = config_mt
 
-        self._mark_dirty()
+            # 修正光标范围
+            if self.nodes:
+                if self.cursor >= len(self.nodes):
+                    self.cursor = len(self.nodes) - 1
+            else:
+                self.cursor = 0
+
+            self._dirty = True
 
     def _watcher_loop(self):
         """后台监控线程：文件变化 + 服务状态"""
@@ -195,42 +206,53 @@ class TUI:
 
             # 检查 nodes.json 是否被外部修改
             new_nodes_mt = _file_mtime(SUBSCRIPTION_FILE)
-            if new_nodes_mt != self._nodes_mtime:
+            with self._lock:
+                old_nodes_mt = self._nodes_mtime
+            if new_nodes_mt != old_nodes_mt:
                 data = load_nodes()
-                self.nodes = data.get("nodes", [])
-                self.update_time = data.get("update_time", "从未")
-                self._nodes_mtime = new_nodes_mt
-                # 修正光标
-                if self.nodes and self.cursor >= len(self.nodes):
-                    self.cursor = len(self.nodes) - 1
+                with self._lock:
+                    self.nodes = data.get("nodes", [])
+                    self.update_time = data.get("update_time", "从未")
+                    self._nodes_mtime = new_nodes_mt
+                    if self.nodes and self.cursor >= len(self.nodes):
+                        self.cursor = len(self.nodes) - 1
                 changed = True
 
             # 检查 config.ini 是否被外部修改（节点选择变化）
             new_config_mt = _file_mtime(INI_FILE)
-            if new_config_mt != self._config_mtime:
-                self.selected = get_selected_node()
-                self._config_mtime = new_config_mt
+            with self._lock:
+                old_config_mt = self._config_mtime
+            if new_config_mt != old_config_mt:
+                selected = get_selected_node()
+                with self._lock:
+                    self.selected = selected
+                    self._config_mtime = new_config_mt
                 changed = True
 
             # 刷新服务状态
-            if not self.busy:
+            with self._lock:
+                is_busy = self.busy
+            if not is_busy:
                 new_status = get_xray_status()
-                if new_status != self.status:
-                    self.status = new_status
-                    changed = True
+                with self._lock:
+                    if new_status != self.status:
+                        self.status = new_status
+                        changed = True
 
             if changed:
-                self._mark_dirty()
+                with self._lock:
+                    self._dirty = True
 
-            # 每秒检查一次（比原来 5 秒更及时）
+            # 每秒检查一次
             time.sleep(1)
 
     def _show_message(self, text, is_error=False):
         """设置底部消息"""
-        self.message = text
-        self.message_time = time.time()
-        self.message_is_error = is_error
-        self._mark_dirty()
+        with self._lock:
+            self.message = text
+            self.message_time = time.time()
+            self.message_is_error = is_error
+            self._dirty = True
 
     def _type_color(self, node_type):
         """根据协议类型返回颜色"""
@@ -247,21 +269,22 @@ class TUI:
 
     def _run_async(self, description, func):
         """在后台线程中执行操作"""
-        if self.busy:
-            return
-
-        self.busy = True
-        self.busy_text = description
-        self.busy_start = time.time()
-        self._mark_dirty()
+        with self._lock:
+            if self.busy:
+                return
+            self.busy = True
+            self.busy_text = description
+            self.busy_start = time.time()
+            self._dirty = True
 
         def wrapper():
             try:
                 func()
             finally:
-                self.busy = False
-                self.busy_text = ""
-                self._mark_dirty()
+                with self._lock:
+                    self.busy = False
+                    self.busy_text = ""
+                    self._dirty = True
 
         t = threading.Thread(target=wrapper, daemon=True)
         t.start()
@@ -275,12 +298,15 @@ class TUI:
         def task():
             self._show_message(f"正在切换到节点 [{index}]...")
             ok, output = run_xray_client(["select", "-i", str(index)])
-            if ok:
-                run_xray_client(["restart"])
-                self._refresh_data()
+            if not ok:
+                self._show_message(f"切换失败: {output}", is_error=True)
+                return
+            rok, routput = run_xray_client(["restart"])
+            self._refresh_data()
+            if rok:
                 self._show_message(f"已切换到节点 [{index}]")
             else:
-                self._show_message(f"切换失败: {output}", is_error=True)
+                self._show_message(f"节点已切换但重启失败: {routput}", is_error=True)
 
         self._run_async("切换节点", task)
 
@@ -290,12 +316,15 @@ class TUI:
         def task():
             self._show_message("正在更新订阅...")
             ok, output = run_xray_client(["update"])
-            if ok:
-                run_xray_client(["restart"])
-                self._refresh_data()
+            if not ok:
+                self._show_message(f"更新失败: {output}", is_error=True)
+                return
+            rok, routput = run_xray_client(["restart"])
+            self._refresh_data()
+            if rok:
                 self._show_message("订阅更新成功")
             else:
-                self._show_message(f"更新失败: {output}", is_error=True)
+                self._show_message(f"订阅已更新但重启失败: {routput}", is_error=True)
 
         self._run_async("更新订阅", task)
 
@@ -371,7 +400,23 @@ class TUI:
             pass  # 忽略写入最后一个字符的错误
 
     def draw(self):
-        """绘制完整界面"""
+        """绘制完整界面，先在锁内取快照再渲染"""
+        # 在锁内取快照，避免渲染期间数据被后台线程修改
+        with self._lock:
+            nodes = list(self.nodes)
+            update_time = self.update_time
+            status = self.status
+            selected = self.selected
+            cursor = self.cursor
+            scroll_offset = self.scroll_offset
+            is_busy = self.busy
+            busy_text = self.busy_text
+            busy_start = self.busy_start
+            message = self.message
+            message_time = self.message_time
+            message_is_error = self.message_is_error
+            self._dirty = False
+
         self.stdscr.erase()
         h, w = self.stdscr.getmaxyx()
 
@@ -387,7 +432,7 @@ class TUI:
 
         # ── 状态栏 ──
         y = 1
-        if self.status == "active":
+        if status == "active":
             status_text = "● 运行中"
             status_color = curses.color_pair(self.PAIR_STATUS_OK) | curses.A_BOLD
         else:
@@ -397,7 +442,7 @@ class TUI:
         self._safe_addstr(y, 1, "状态: ", curses.A_BOLD)
         self._safe_addstr(y, 8, status_text, status_color)
 
-        info = f"节点: {len(self.nodes)}  更新: {self.update_time}"
+        info = f"节点: {len(nodes)}  更新: {update_time}"
         info_x = w - len(info) - 2
         if info_x > 20:
             self._safe_addstr(y, info_x, info, curses.color_pair(self.PAIR_NORMAL))
@@ -408,7 +453,6 @@ class TUI:
 
         # ── 节点列表 ──
         list_top = 3
-        # 底部留 3 行: 分隔线 + 帮助 + 消息
         list_bottom = h - 3
         visible_count = list_bottom - list_top
 
@@ -416,7 +460,7 @@ class TUI:
             self.stdscr.refresh()
             return
 
-        if not self.nodes:
+        if not nodes:
             self._safe_addstr(
                 list_top + 1,
                 2,
@@ -425,25 +469,28 @@ class TUI:
             )
         else:
             # 确保光标在可见范围
-            if self.cursor < self.scroll_offset:
-                self.scroll_offset = self.cursor
-            elif self.cursor >= self.scroll_offset + visible_count:
-                self.scroll_offset = self.cursor - visible_count + 1
+            if cursor < scroll_offset:
+                scroll_offset = cursor
+            elif cursor >= scroll_offset + visible_count:
+                scroll_offset = cursor - visible_count + 1
+            # 回写修正后的 scroll_offset
+            with self._lock:
+                self.scroll_offset = scroll_offset
 
             # 列头
             col_header = f"  {'#':<5}{'类型':<13}{'名称':<35}{'服务器'}"
             self._safe_addstr(list_top, 0, col_header[:w], curses.A_BOLD | curses.A_UNDERLINE)
 
             for i in range(visible_count):
-                idx = self.scroll_offset + i
-                if idx >= len(self.nodes):
+                idx = scroll_offset + i
+                if idx >= len(nodes):
                     break
 
-                node = self.nodes[idx]
+                node = nodes[idx]
                 row_y = list_top + 1 + i
 
-                is_cursor = idx == self.cursor
-                is_selected = idx == self.selected
+                is_cursor = idx == cursor
+                is_selected = idx == selected
 
                 # 标记符号
                 marker = "▸ " if is_cursor else "  "
@@ -462,29 +509,20 @@ class TUI:
                 # 行底色
                 if is_cursor:
                     line_attr = curses.color_pair(self.PAIR_HIGHLIGHT) | curses.A_BOLD
-                    # 填充整行背景
                     self._safe_addstr(row_y, 0, " " * w, line_attr)
                 elif is_selected:
                     line_attr = curses.color_pair(self.PAIR_SELECTED) | curses.A_BOLD
                 else:
                     line_attr = curses.color_pair(self.PAIR_NORMAL)
 
-                # 输出标记
                 self._safe_addstr(row_y, 0, marker, line_attr)
-
-                # 索引
                 self._safe_addstr(row_y, 2, f"{idx:<5}", line_attr)
 
-                # 协议类型 (带颜色)
                 type_attr = curses.color_pair(self._type_color(ntype))
                 if is_cursor:
-                    type_attr = line_attr  # 光标行覆盖颜色
+                    type_attr = line_attr
                 self._safe_addstr(row_y, 7, f"{ntype:<13}", type_attr)
-
-                # 名称
                 self._safe_addstr(row_y, 20, f"{name:<35}", line_attr)
-
-                # 服务器
                 self._safe_addstr(row_y, 55, server, line_attr)
 
         # ── 底部分隔线 ──
@@ -494,10 +532,10 @@ class TUI:
         # ── 帮助栏 / 忙碌状态 ──
         help_y = h - 2
         help_attr = curses.color_pair(self.PAIR_HELP)
-        if self.busy:
-            elapsed = time.time() - self.busy_start
+        if is_busy:
+            elapsed = time.time() - busy_start
             spin = SPINNER[int(elapsed * 8) % len(SPINNER)]
-            help_text = f"  {spin} {self.busy_text}... ({elapsed:.0f}s)"
+            help_text = f"  {spin} {busy_text}... ({elapsed:.0f}s)"
             self._safe_addstr(help_y, 0, help_text, help_attr | curses.A_BOLD)
         else:
             helps = [
@@ -515,12 +553,11 @@ class TUI:
 
         # ── 消息栏 ──
         msg_y = h - 1
-        if self.message and (time.time() - self.message_time < 5):
-            msg_attr = curses.color_pair(self.PAIR_MSG_ERR if self.message_is_error else self.PAIR_MSG_OK)
-            self._safe_addstr(msg_y, 1, self.message, msg_attr | curses.A_BOLD)
+        if message and (time.time() - message_time < 5):
+            msg_attr = curses.color_pair(self.PAIR_MSG_ERR if message_is_error else self.PAIR_MSG_OK)
+            self._safe_addstr(msg_y, 1, message, msg_attr | curses.A_BOLD)
 
         self.stdscr.refresh()
-        self._dirty = False
 
     def handle_input(self, key):
         """处理键盘输入"""
@@ -528,34 +565,40 @@ class TUI:
             self.running = False
 
         elif key == curses.KEY_UP or key == ord("k"):
-            if self.cursor > 0:
-                self.cursor -= 1
-                self._mark_dirty()
+            with self._lock:
+                if self.cursor > 0:
+                    self.cursor -= 1
+                    self._dirty = True
 
         elif key == curses.KEY_DOWN or key == ord("j"):
-            if self.cursor < len(self.nodes) - 1:
-                self.cursor += 1
-                self._mark_dirty()
+            with self._lock:
+                if self.cursor < len(self.nodes) - 1:
+                    self.cursor += 1
+                    self._dirty = True
 
         elif key == curses.KEY_HOME or key == ord("g"):
-            self.cursor = 0
-            self._mark_dirty()
+            with self._lock:
+                self.cursor = 0
+                self._dirty = True
 
         elif key == curses.KEY_END or key == ord("G"):
-            if self.nodes:
-                self.cursor = len(self.nodes) - 1
-                self._mark_dirty()
+            with self._lock:
+                if self.nodes:
+                    self.cursor = len(self.nodes) - 1
+                    self._dirty = True
 
         elif key == curses.KEY_PPAGE:  # Page Up
             visible = self.stdscr.getmaxyx()[0] - 6
-            self.cursor = max(0, self.cursor - visible)
-            self._mark_dirty()
+            with self._lock:
+                self.cursor = max(0, self.cursor - visible)
+                self._dirty = True
 
         elif key == curses.KEY_NPAGE:  # Page Down
             visible = self.stdscr.getmaxyx()[0] - 6
-            if self.nodes:
-                self.cursor = min(len(self.nodes) - 1, self.cursor + visible)
-                self._mark_dirty()
+            with self._lock:
+                if self.nodes:
+                    self.cursor = min(len(self.nodes) - 1, self.cursor + visible)
+                    self._dirty = True
 
         elif key in (curses.KEY_ENTER, 10, 13):
             self._do_select()
@@ -576,12 +619,12 @@ class TUI:
             self._do_ping()
 
         elif key == ord("l") or key == ord("L") or key == curses.KEY_F5:
-            # 手动刷新
             self._refresh_data()
             self._show_message("已刷新数据")
 
         elif key == curses.KEY_RESIZE:
-            self._mark_dirty()
+            with self._lock:
+                self._dirty = True
 
     def run(self):
         """主循环"""
@@ -589,11 +632,11 @@ class TUI:
         curses.curs_set(0)  # 隐藏光标
 
         while self.running:
-            # 忙碌时动画需要持续刷新（spinner + 计时器）
-            need_draw = self._dirty or self.busy
-            # 消息倒计时期间也需要刷新（5秒后自动消失）
-            if self.message and (time.time() - self.message_time < 5.1):
-                need_draw = True
+            with self._lock:
+                need_draw = self._dirty or self.busy
+                if self.message and (time.time() - self.message_time < 5.1):
+                    need_draw = True
+                is_busy = self.busy
 
             if need_draw:
                 self.draw()
@@ -606,7 +649,7 @@ class TUI:
                 self.running = False
 
             # 忙碌时更频繁刷新以驱动 spinner 动画，空闲时降低 CPU
-            time.sleep(0.1 if self.busy else 0.05)
+            time.sleep(0.05 if is_busy else 0.1)
 
 
 def main():

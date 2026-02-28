@@ -377,6 +377,8 @@ if [ "$HAS_EXECUTABLE" = true ]; then
         cp "$SCRIPT_DIR/xray-tui" /usr/local/bin/xray-tui
         chmod +x /usr/local/bin/xray-tui
         echo -e "${GREEN}✓ xray-tui 可执行文件安装成功${NC}"
+    else
+        echo -e "${YELLOW}xray-tui 未找到，TUI 管理界面不可用（核心功能不受影响）${NC}"
     fi
 else
     # ---- 使用 Python 脚本 ----

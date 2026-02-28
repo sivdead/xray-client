@@ -19,7 +19,7 @@ A lightweight Xray client with JustMySocks subscription support for TencentOS, C
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Usage](#usage)
-- [TUI](#tui)
+- [TUI](#%EF%B8%8F-tui)
 - [Docker](#docker)
 - [Proxy Settings](#proxy-settings)
 - [Troubleshooting](#troubleshooting)
