@@ -415,7 +415,11 @@ else
 
     # 安装 Python 依赖（用于 Clash 格式解析）
     echo "安装 Python 依赖..."
-    if ! python3 -m pip install --quiet pyyaml 2>&1; then
+    if python3 -m pip install --quiet pyyaml 2>/dev/null; then
+        : # 安装成功
+    elif python3 -m pip install --quiet --break-system-packages pyyaml 2>/dev/null; then
+        : # PEP 668 系统 Python，使用 --break-system-packages
+    else
         echo -e "${YELLOW}可选依赖 pyyaml 安装失败（Clash 格式解析可能不可用，核心功能不受影响）${NC}"
     fi
 fi
