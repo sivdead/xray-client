@@ -371,8 +371,6 @@ if [ "$HAS_EXECUTABLE" = true ]; then
     echo "安装预编译可执行文件..."
     cp "$SCRIPT_DIR/xray-client" /usr/local/bin/xray-client
     chmod +x /usr/local/bin/xray-client
-    # 创建 xray-tui symlink（兼容旧用法，实际由 xray-client tui 提供）
-    ln -sf /usr/local/bin/xray-client /usr/local/bin/xray-tui
     echo -e "${GREEN}✓ xray-client 可执行文件安装成功（含 TUI）${NC}"
 else
     # ---- 使用 Python 脚本 ----
@@ -391,8 +389,6 @@ else
     fi
 
     chmod +x /usr/local/bin/xray-client
-    # 创建 xray-tui symlink（兼容旧用法，实际由 xray-client tui 提供）
-    ln -sf /usr/local/bin/xray-client /usr/local/bin/xray-tui
 
     # 安装 Python 依赖（用于 Clash 格式解析）
     echo "安装 Python 依赖..."

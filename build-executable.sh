@@ -35,7 +35,7 @@ python3 -m pip install pyyaml
 BUILD_DIR="dist"
 mkdir -p "$BUILD_DIR"
 
-# 构建 xray-client（已包含 TUI，通过 xray-client tui 或 symlink xray-tui 启动）
+# 构建 xray-client（已包含 TUI，通过 xray-client tui 启动）
 echo ""
 echo -e "${YELLOW}构建 xray-client（含 TUI）...${NC}"
 python3 -m PyInstaller \
@@ -56,8 +56,6 @@ ls -lh dist/xray-client
 echo ""
 echo "安装方式:"
 echo "  cp dist/xray-client /usr/local/bin/"
-echo "  ln -sf /usr/local/bin/xray-client /usr/local/bin/xray-tui  # 兼容旧用法"
 echo ""
 echo "使用方式:"
 echo "  xray-client tui     # 启动终端交互界面"
-echo "  xray-tui            # 通过 symlink 启动（兼容旧用法）"

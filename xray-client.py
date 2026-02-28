@@ -6,7 +6,6 @@ Xray Client - 支持 JustMySocks 订阅
 """
 
 import os
-import sys
 import json
 import base64
 import urllib.request
@@ -1251,7 +1250,7 @@ class XrayClient:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TUI - 终端交互管理界面（原 tui.py / xray-tui，现通过 xray-client tui 启动）
+# TUI - 终端交互管理界面（通过 xray-client tui 启动）
 # ══════════════════════════════════════════════════════════════════════════════
 
 # 忙碌状态动画帧
@@ -1933,11 +1932,6 @@ def main():
     subparsers.add_parser("tui", help="启动终端交互管理界面")
 
     args = parser.parse_args()
-
-    # 支持通过 symlink 名 xray-tui 直接启动 TUI
-    if os.path.basename(sys.argv[0]) in ("xray-tui", "xray-tui.py"):
-        _run_tui()
-        return
 
     if not args.command:
         parser.print_help()
