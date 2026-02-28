@@ -3,6 +3,7 @@
 """
 Xray Client TUI - 终端交互管理界面
 基于 curses，无需额外依赖
+实时监控文件变化和服务状态，自动刷新
 """
 
 import curses
@@ -21,6 +22,9 @@ INI_FILE = os.path.join(CLIENT_CONFIG_DIR, "config.ini")
 
 # 确保 locale 正确（支持中文）
 locale.setlocale(locale.LC_ALL, "")
+
+# 忙碌状态动画帧
+SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 
 def _resolve_executable(name):
@@ -63,6 +67,14 @@ def get_selected_node():
         config.read(INI_FILE, encoding="utf-8")
         return config.getint("node", "selected", fallback=0)
     except Exception:
+        return 0
+
+
+def _file_mtime(path):
+    """安全获取文件 mtime，不存在返回 0"""
+    try:
+        return os.stat(path).st_mtime
+    except OSError:
         return 0
 
 
@@ -121,13 +133,19 @@ class TUI:
         self.running = True
         self.busy = False  # 是否正在执行操作
         self.busy_text = ""
+        self.busy_start = 0  # 操作开始时间
+        self._dirty = True  # 是否需要重绘
+
+        # 文件监控用的 mtime
+        self._nodes_mtime = 0
+        self._config_mtime = 0
 
         self._setup_colors()
         self._refresh_data()
 
-        # 启动后台状态刷新线程
-        self._status_thread = threading.Thread(target=self._status_loop, daemon=True)
-        self._status_thread.start()
+        # 启动后台监控线程
+        self._watcher_thread = threading.Thread(target=self._watcher_loop, daemon=True)
+        self._watcher_thread.start()
 
     def _setup_colors(self):
         """初始化颜色方案"""
@@ -147,6 +165,10 @@ class TUI:
         curses.init_pair(self.PAIR_MSG_OK, curses.COLOR_GREEN, -1)
         curses.init_pair(self.PAIR_MSG_ERR, curses.COLOR_RED, -1)
 
+    def _mark_dirty(self):
+        """标记需要重绘"""
+        self._dirty = True
+
     def _refresh_data(self):
         """刷新节点数据和状态"""
         data = load_nodes()
@@ -154,6 +176,8 @@ class TUI:
         self.update_time = data.get("update_time", "从未")
         self.status = get_xray_status()
         self.selected = get_selected_node()
+        self._nodes_mtime = _file_mtime(SUBSCRIPTION_FILE)
+        self._config_mtime = _file_mtime(INI_FILE)
 
         # 修正光标范围
         if self.nodes:
@@ -162,18 +186,51 @@ class TUI:
         else:
             self.cursor = 0
 
-    def _status_loop(self):
-        """后台定时刷新状态"""
+        self._mark_dirty()
+
+    def _watcher_loop(self):
+        """后台监控线程：文件变化 + 服务状态"""
         while self.running:
-            time.sleep(5)
+            changed = False
+
+            # 检查 nodes.json 是否被外部修改
+            new_nodes_mt = _file_mtime(SUBSCRIPTION_FILE)
+            if new_nodes_mt != self._nodes_mtime:
+                data = load_nodes()
+                self.nodes = data.get("nodes", [])
+                self.update_time = data.get("update_time", "从未")
+                self._nodes_mtime = new_nodes_mt
+                # 修正光标
+                if self.nodes and self.cursor >= len(self.nodes):
+                    self.cursor = len(self.nodes) - 1
+                changed = True
+
+            # 检查 config.ini 是否被外部修改（节点选择变化）
+            new_config_mt = _file_mtime(INI_FILE)
+            if new_config_mt != self._config_mtime:
+                self.selected = get_selected_node()
+                self._config_mtime = new_config_mt
+                changed = True
+
+            # 刷新服务状态
             if not self.busy:
-                self.status = get_xray_status()
+                new_status = get_xray_status()
+                if new_status != self.status:
+                    self.status = new_status
+                    changed = True
+
+            if changed:
+                self._mark_dirty()
+
+            # 每秒检查一次（比原来 5 秒更及时）
+            time.sleep(1)
 
     def _show_message(self, text, is_error=False):
         """设置底部消息"""
         self.message = text
         self.message_time = time.time()
         self.message_is_error = is_error
+        self._mark_dirty()
 
     def _type_color(self, node_type):
         """根据协议类型返回颜色"""
@@ -195,6 +252,8 @@ class TUI:
 
         self.busy = True
         self.busy_text = description
+        self.busy_start = time.time()
+        self._mark_dirty()
 
         def wrapper():
             try:
@@ -202,6 +261,7 @@ class TUI:
             finally:
                 self.busy = False
                 self.busy_text = ""
+                self._mark_dirty()
 
         t = threading.Thread(target=wrapper, daemon=True)
         t.start()
@@ -258,14 +318,14 @@ class TUI:
         """测试节点延迟"""
 
         def task():
-            self._show_message("正在测试节点延迟（可能需要较长时间）...")
+            self._show_message("正在测试节点延迟...")
             ok, output = run_xray_client(["test"], timeout=300)
             if ok:
-                self._show_message("测试完成，查看终端输出了解详情")
+                self._show_message("测试完成")
             else:
                 self._show_message(f"测试失败: {output}", is_error=True)
 
-        self._run_async("测试节点", task)
+        self._run_async("测试节点延迟", task)
 
     def _do_auto_select(self):
         """自动选择最佳节点"""
@@ -357,7 +417,12 @@ class TUI:
             return
 
         if not self.nodes:
-            self._safe_addstr(list_top + 1, 2, "暂无节点数据，按 u 更新订阅", curses.color_pair(self.PAIR_HELP))
+            self._safe_addstr(
+                list_top + 1,
+                2,
+                "暂无节点数据，按 u 更新订阅",
+                curses.color_pair(self.PAIR_HELP),
+            )
         else:
             # 确保光标在可见范围
             if self.cursor < self.scroll_offset:
@@ -426,11 +491,13 @@ class TUI:
         sep_y = h - 3
         self._safe_addstr(sep_y, 0, "─" * w, curses.color_pair(self.PAIR_NORMAL))
 
-        # ── 帮助栏 ──
+        # ── 帮助栏 / 忙碌状态 ──
         help_y = h - 2
         help_attr = curses.color_pair(self.PAIR_HELP)
         if self.busy:
-            help_text = f"  ⟳ {self.busy_text}..."
+            elapsed = time.time() - self.busy_start
+            spin = SPINNER[int(elapsed * 8) % len(SPINNER)]
+            help_text = f"  {spin} {self.busy_text}... ({elapsed:.0f}s)"
             self._safe_addstr(help_y, 0, help_text, help_attr | curses.A_BOLD)
         else:
             helps = [
@@ -453,6 +520,7 @@ class TUI:
             self._safe_addstr(msg_y, 1, self.message, msg_attr | curses.A_BOLD)
 
         self.stdscr.refresh()
+        self._dirty = False
 
     def handle_input(self, key):
         """处理键盘输入"""
@@ -462,26 +530,32 @@ class TUI:
         elif key == curses.KEY_UP or key == ord("k"):
             if self.cursor > 0:
                 self.cursor -= 1
+                self._mark_dirty()
 
         elif key == curses.KEY_DOWN or key == ord("j"):
             if self.cursor < len(self.nodes) - 1:
                 self.cursor += 1
+                self._mark_dirty()
 
         elif key == curses.KEY_HOME or key == ord("g"):
             self.cursor = 0
+            self._mark_dirty()
 
         elif key == curses.KEY_END or key == ord("G"):
             if self.nodes:
                 self.cursor = len(self.nodes) - 1
+                self._mark_dirty()
 
         elif key == curses.KEY_PPAGE:  # Page Up
             visible = self.stdscr.getmaxyx()[0] - 6
             self.cursor = max(0, self.cursor - visible)
+            self._mark_dirty()
 
         elif key == curses.KEY_NPAGE:  # Page Down
             visible = self.stdscr.getmaxyx()[0] - 6
             if self.nodes:
                 self.cursor = min(len(self.nodes) - 1, self.cursor + visible)
+                self._mark_dirty()
 
         elif key in (curses.KEY_ENTER, 10, 13):
             self._do_select()
@@ -506,20 +580,33 @@ class TUI:
             self._refresh_data()
             self._show_message("已刷新数据")
 
+        elif key == curses.KEY_RESIZE:
+            self._mark_dirty()
+
     def run(self):
         """主循环"""
         self.stdscr.nodelay(True)
         curses.curs_set(0)  # 隐藏光标
 
         while self.running:
-            self.draw()
+            # 忙碌时动画需要持续刷新（spinner + 计时器）
+            need_draw = self._dirty or self.busy
+            # 消息倒计时期间也需要刷新（5秒后自动消失）
+            if self.message and (time.time() - self.message_time < 5.1):
+                need_draw = True
+
+            if need_draw:
+                self.draw()
+
             try:
                 key = self.stdscr.getch()
                 if key != -1:
                     self.handle_input(key)
             except KeyboardInterrupt:
                 self.running = False
-            time.sleep(0.05)  # ~20fps
+
+            # 忙碌时更频繁刷新以驱动 spinner 动画，空闲时降低 CPU
+            time.sleep(0.1 if self.busy else 0.05)
 
 
 def main():
