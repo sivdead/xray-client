@@ -16,7 +16,6 @@ import time
 import signal
 import logging
 import argparse
-import yaml
 import socket
 from datetime import datetime
 from configparser import ConfigParser
@@ -383,6 +382,11 @@ class XrayClient:
 
     def parse_clash(self, content):
         """解析 Clash YAML 配置"""
+        try:
+            import yaml
+        except ImportError:
+            logger.error("解析 Clash 格式需要 pyyaml，请执行: pip install pyyaml")
+            return []
         nodes = []
         try:
             data = yaml.safe_load(content)
