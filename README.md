@@ -237,7 +237,7 @@ Keyboard shortcuts:
 Features:
 - Real-time service status display
 - Color-coded protocol types (VMess, VLESS, Shadowsocks, Trojan)
-- Node list with scrolling and search
+- Node list with scrolling
 - Background operations (non-blocking UI)
 
 ## 🐳 Docker

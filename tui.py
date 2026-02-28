@@ -40,7 +40,9 @@ def load_nodes():
     try:
         if os.path.exists(SUBSCRIPTION_FILE):
             with open(SUBSCRIPTION_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
     except (json.JSONDecodeError, OSError):
         pass
     return {"nodes": [], "update_time": "从未"}
@@ -202,46 +204,49 @@ class TUI:
     def _watcher_loop(self):
         """后台监控线程：文件变化 + 服务状态"""
         while self.running:
-            changed = False
+            try:
+                changed = False
 
-            # 检查 nodes.json 是否被外部修改
-            new_nodes_mt = _file_mtime(SUBSCRIPTION_FILE)
-            with self._lock:
-                old_nodes_mt = self._nodes_mtime
-            if new_nodes_mt != old_nodes_mt:
-                data = load_nodes()
+                # 检查 nodes.json 是否被外部修改
+                new_nodes_mt = _file_mtime(SUBSCRIPTION_FILE)
                 with self._lock:
-                    self.nodes = data.get("nodes", [])
-                    self.update_time = data.get("update_time", "从未")
-                    self._nodes_mtime = new_nodes_mt
-                    if self.nodes and self.cursor >= len(self.nodes):
-                        self.cursor = len(self.nodes) - 1
-                changed = True
+                    old_nodes_mt = self._nodes_mtime
+                if new_nodes_mt != old_nodes_mt:
+                    data = load_nodes()
+                    with self._lock:
+                        self.nodes = data.get("nodes", [])
+                        self.update_time = data.get("update_time", "从未")
+                        self._nodes_mtime = new_nodes_mt
+                        if self.nodes and self.cursor >= len(self.nodes):
+                            self.cursor = len(self.nodes) - 1
+                    changed = True
 
-            # 检查 config.ini 是否被外部修改（节点选择变化）
-            new_config_mt = _file_mtime(INI_FILE)
-            with self._lock:
-                old_config_mt = self._config_mtime
-            if new_config_mt != old_config_mt:
-                selected = get_selected_node()
+                # 检查 config.ini 是否被外部修改（节点选择变化）
+                new_config_mt = _file_mtime(INI_FILE)
                 with self._lock:
-                    self.selected = selected
-                    self._config_mtime = new_config_mt
-                changed = True
+                    old_config_mt = self._config_mtime
+                if new_config_mt != old_config_mt:
+                    selected = get_selected_node()
+                    with self._lock:
+                        self.selected = selected
+                        self._config_mtime = new_config_mt
+                    changed = True
 
-            # 刷新服务状态
-            with self._lock:
-                is_busy = self.busy
-            if not is_busy:
-                new_status = get_xray_status()
+                # 刷新服务状态
                 with self._lock:
-                    if new_status != self.status:
-                        self.status = new_status
-                        changed = True
+                    is_busy = self.busy
+                if not is_busy:
+                    new_status = get_xray_status()
+                    with self._lock:
+                        if new_status != self.status:
+                            self.status = new_status
+                            changed = True
 
-            if changed:
-                with self._lock:
-                    self._dirty = True
+                if changed:
+                    with self._lock:
+                        self._dirty = True
+            except Exception:
+                pass  # 保持监控线程存活，下次循环重试
 
             # 每秒检查一次
             time.sleep(1)
@@ -336,7 +341,10 @@ class TUI:
             ok, output = run_xray_client(["restart"])
             if ok:
                 time.sleep(1)
-                self.status = get_xray_status()
+                new_status = get_xray_status()
+                with self._lock:
+                    self.status = new_status
+                    self._dirty = True
                 self._show_message("服务已重启")
             else:
                 self._show_message(f"重启失败: {output}", is_error=True)
