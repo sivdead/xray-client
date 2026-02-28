@@ -21,6 +21,10 @@
 - [系统要求](#-系统要求)
 - [快速开始](#-快速开始)
 - [安装方式](#-安装方式)
+  - [方式一：从 GitHub Release 下载预编译可执行文件（无需 Python）](#方式一从-github-release-下载预编译可执行文件无需-python)
+  - [方式二：在线安装](#方式二在线安装)
+  - [方式三：交互式快速安装](#方式三交互式快速安装)
+  - [方式四：离线安装](#方式四离线安装)
 - [配置说明](#%EF%B8%8F-配置说明)
 - [使用命令](#-使用命令)
 - [代理设置](#-代理设置)
@@ -72,7 +76,25 @@ source /etc/profile.d/xray-proxy.sh
 
 ## 📦 安装方式
 
-### 方式一：在线安装（推荐）
+### 方式一：从 GitHub Release 下载预编译可执行文件（无需 Python）
+
+[GitHub Releases](https://github.com/sivdead/xray-client/releases) 页面提供已打包的独立可执行文件（`xray-client` 和 `xray-tui`），内置所有 Python 依赖，无需在目标机器上安装 Python，直接可用。
+
+```bash
+# 下载最新版本的可执行文件
+curl -fsSL -L -o xray-client https://github.com/sivdead/xray-client/releases/latest/download/xray-client
+curl -fsSL -L -o xray-tui    https://github.com/sivdead/xray-client/releases/latest/download/xray-tui
+
+# 安装到系统路径
+sudo install -m 755 xray-client /usr/local/bin/xray-client
+sudo install -m 755 xray-tui    /usr/local/bin/xray-tui
+```
+
+安装完成后，参考[配置说明](#%EF%B8%8F-配置说明)完成配置，然后运行 `sudo xray-client update` 即可开始使用。
+
+> **提示：** 国内服务器若无法直连 GitHub，可在有代理的机器上下载好文件后，通过 scp 传输到目标服务器。
+
+### 方式二：在线安装
 
 ```bash
 # 使用 jsDelivr CDN（国内推荐）
@@ -91,7 +113,7 @@ sudo bash install.sh
 4. 配置 Systemd 服务
 5. 设置定时自动更新
 
-### 方式二：交互式快速安装
+### 方式三：交互式快速安装
 
 ```bash
 curl -fsSL -o quick-install.sh https://cdn.jsdelivr.net/gh/sivdead/xray-client@master/quick-install.sh
@@ -100,7 +122,7 @@ sudo bash quick-install.sh
 
 根据提示输入订阅链接和端口。
 
-### 方式三：离线安装
+### 方式四：离线安装
 
 适用于无法访问外网的服务器：
 
