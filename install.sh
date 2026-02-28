@@ -371,15 +371,9 @@ if [ "$HAS_EXECUTABLE" = true ]; then
     echo "安装预编译可执行文件..."
     cp "$SCRIPT_DIR/xray-client" /usr/local/bin/xray-client
     chmod +x /usr/local/bin/xray-client
-    echo -e "${GREEN}✓ xray-client 可执行文件安装成功${NC}"
-
-    if [ -f "$SCRIPT_DIR/xray-tui" ]; then
-        cp "$SCRIPT_DIR/xray-tui" /usr/local/bin/xray-tui
-        chmod +x /usr/local/bin/xray-tui
-        echo -e "${GREEN}✓ xray-tui 可执行文件安装成功${NC}"
-    else
-        echo -e "${YELLOW}xray-tui 未找到，TUI 管理界面不可用（核心功能不受影响）${NC}"
-    fi
+    # 创建 xray-tui symlink（兼容旧用法，实际由 xray-client tui 提供）
+    ln -sf /usr/local/bin/xray-client /usr/local/bin/xray-tui
+    echo -e "${GREEN}✓ xray-client 可执行文件安装成功（含 TUI）${NC}"
 else
     # ---- 使用 Python 脚本 ----
     echo "正在下载 xray-client 脚本..."
@@ -397,21 +391,8 @@ else
     fi
 
     chmod +x /usr/local/bin/xray-client
-
-    # 下载 TUI 脚本（可选）
-    echo "正在下载 TUI 脚本..."
-    if download_file "${SCRIPT_BASE_URL}/tui.py" "/usr/local/bin/xray-tui" "$NETWORK_MODE"; then
-        chmod +x /usr/local/bin/xray-tui
-        echo -e "${GREEN}✓ TUI 脚本下载成功${NC}"
-    else
-        if [ -f "$SCRIPT_DIR/tui.py" ]; then
-            cp "$SCRIPT_DIR/tui.py" /usr/local/bin/xray-tui
-            chmod +x /usr/local/bin/xray-tui
-            echo -e "${GREEN}✓ 使用本地 tui.py${NC}"
-        else
-            echo -e "${YELLOW}TUI 脚本未找到，跳过（可稍后手动安装）${NC}"
-        fi
-    fi
+    # 创建 xray-tui symlink（兼容旧用法，实际由 xray-client tui 提供）
+    ln -sf /usr/local/bin/xray-client /usr/local/bin/xray-tui
 
     # 安装 Python 依赖（用于 Clash 格式解析）
     echo "安装 Python 依赖..."
