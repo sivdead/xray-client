@@ -44,6 +44,7 @@ SUBSCRIPTION_FILE = os.path.join(CLIENT_CONFIG_DIR, "subscription", "nodes.json"
 INI_FILE = os.path.join(CLIENT_CONFIG_DIR, "config.ini")
 PID_FILE = "/var/run/xray-client.pid"
 PROXY_PROFILE = "/etc/profile.d/xray-proxy.sh"
+ETC_ENVIRONMENT = "/etc/environment"
 IPTABLES_CHAIN = "XRAY"
 
 # GitHub 代理镜像列表
@@ -1007,6 +1008,42 @@ class XrayClient:
         print(f"已选择节点 [{index}]: {nodes[index]['name']}")
         return True
 
+    # Keys managed in /etc/environment
+    _ENV_KEYS = (
+        "http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+        "all_proxy", "no_proxy", "NO_PROXY",
+    )
+
+    def _update_etc_environment(self, add: bool) -> None:
+        """Add or remove proxy vars from /etc/environment (for GUI / PAM sessions)."""
+        lines: list[str] = []
+        if os.path.exists(ETC_ENVIRONMENT):
+            with open(ETC_ENVIRONMENT, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        # Strip any previously written proxy entries
+        lines = [
+            l for l in lines
+            if not any(l.strip().startswith(k + "=") for k in self._ENV_KEYS)
+        ]
+        if add:
+            http_url = f"http://127.0.0.1:{self.local_http_port}"
+            socks_url = f"socks5://127.0.0.1:{self.local_socks_port}"
+            new_entries = [
+                f"http_proxy={http_url}\n",
+                f"https_proxy={http_url}\n",
+                f"HTTP_PROXY={http_url}\n",
+                f"HTTPS_PROXY={http_url}\n",
+                f"all_proxy={socks_url}\n",
+                f"no_proxy={self.no_proxy}\n",
+                f"NO_PROXY={self.no_proxy}\n",
+            ]
+            # Ensure the file ends with a newline before appending
+            if lines and not lines[-1].endswith("\n"):
+                lines[-1] += "\n"
+            lines.extend(new_entries)
+        with open(ETC_ENVIRONMENT, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+
     def enable_proxy(self):
         """开启系统 HTTP/HTTPS 代理环境变量"""
         content = (
@@ -1025,11 +1062,13 @@ class XrayClient:
             with open(PROXY_PROFILE, "w", encoding="utf-8") as f:
                 f.write(content)
             subprocess.run([_resolve_executable("chmod"), "644", PROXY_PROFILE], check=False)
+            self._update_etc_environment(add=True)
             print("系统代理已开启")
             print(f"  HTTP  代理: http://127.0.0.1:{self.local_http_port}")
             print(f"  SOCKS 代理: socks5://127.0.0.1:{self.local_socks_port}")
-            print("\n新终端将自动使用代理，当前终端请执行:")
+            print("\n终端（新建会话自动生效）当前终端请执行:")
             print(f"  source {PROXY_PROFILE}")
+            print("\nGUI 应用（浏览器等）请重新登录系统后生效，或使用 tun-on 透明代理模式。")
             return True
         except Exception as e:
             logger.error(f"开启系统代理失败: {e}")
@@ -1040,12 +1079,17 @@ class XrayClient:
         if os.path.exists(PROXY_PROFILE):
             try:
                 os.remove(PROXY_PROFILE)
+                self._update_etc_environment(add=False)
                 print("系统代理已关闭")
                 print("当前终端请执行: unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy")
+                print("GUI 应用请重新登录系统后生效。")
             except OSError as e:
                 logger.error(f"关闭系统代理失败: {e}")
                 return False
         else:
+            # /etc/profile.d/ file may have been removed manually;
+            # still clean up /etc/environment in case entries linger.
+            self._update_etc_environment(add=False)
             print("系统代理未开启")
         return True
 
