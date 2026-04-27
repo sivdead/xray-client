@@ -31,33 +31,50 @@ jobs:
         git push origin "${{ github.event.inputs.version }}"
 
   build-executables:
-    name: Build Executables (${{ matrix.arch }})
+    name: Build Executables (${{ matrix.name }})
     needs: [create-tag]
     if: always() && (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - arch: x86_64
-            xray_arch: Xray-linux-64
-            pyinstaller_target: ""
-          - arch: aarch64
-            xray_arch: Xray-linux-arm64-v8a
-            pyinstaller_target: ""
+          - name: linux-x86_64
+            runner: ubuntu-latest
+            os: linux
+            arch: x86_64
+            cross_compile: false
+          - name: linux-aarch64
+            runner: ubuntu-latest
+            os: linux
+            arch: aarch64
+            cross_compile: true
+          - name: macos-x86_64
+            runner: macos-13
+            os: macos
+            arch: x86_64
+            cross_compile: false
+          - name: macos-arm64
+            runner: macos-latest
+            os: macos
+            arch: arm64
+            cross_compile: false
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up Python
+      if: matrix.cross_compile == false
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
     - name: Install dependencies
+      if: matrix.cross_compile == false
       run: |
         pip install pyinstaller pyyaml
 
-    - name: Build executables (native x86_64)
-      if: matrix.arch == 'x86_64'
+    - name: Build executables (native linux x86_64)
+      if: matrix.os == 'linux' && matrix.cross_compile == false
       run: |
         # Build xray-client (includes TUI)
         pyinstaller --onefile --name xray-client --clean --noconfirm --strip \
@@ -66,7 +83,7 @@ jobs:
           xray-client.py
 
     - name: Build executables (cross-compile aarch64)
-      if: matrix.arch == 'aarch64'
+      if: matrix.os == 'linux' && matrix.cross_compile == true
       uses: uraimo/run-on-arch-action@v3
       with:
         arch: aarch64
@@ -82,10 +99,29 @@ jobs:
             --hidden-import yaml \
             xray-client.py
 
+    - name: Build executables (native macOS)
+      if: matrix.os == 'macos'
+      run: |
+        # Build xray-client (includes TUI)
+        # Note: --strip is omitted on macOS because the system `strip`
+        # tool breaks PyInstaller bootloader signatures on Apple Silicon
+        # and can produce broken binaries on Intel as well.
+        pyinstaller --onefile --name xray-client --clean --noconfirm \
+          --hidden-import yaml \
+          --hidden-import curses \
+          xray-client.py
+
+    - name: Verify executable runs
+      if: matrix.cross_compile == false
+      run: |
+        ls -lh dist/xray-client
+        file dist/xray-client || true
+        dist/xray-client --help || true
+
     - name: Upload executables
       uses: actions/upload-artifact@v4
       with:
-        name: executables-${{ matrix.arch }}
+        name: executables-${{ matrix.name }}
         path: |
           dist/xray-client
 
@@ -194,7 +230,7 @@ jobs:
         cp LICENSE xray-client-offline/
 
         # Copy pre-built executables (no Python needed on target)
-        cp artifacts/executables-x86_64/xray-client xray-client-offline/
+        cp artifacts/executables-linux-x86_64/xray-client xray-client-offline/
         chmod +x xray-client-offline/xray-client
 
         # Also include Python sources as fallback
@@ -276,7 +312,7 @@ jobs:
         cp LICENSE xray-client-offline/
 
         # Copy pre-built executables
-        cp artifacts/executables-aarch64/xray-client xray-client-offline/
+        cp artifacts/executables-linux-aarch64/xray-client xray-client-offline/
         chmod +x xray-client-offline/xray-client
 
         # Also include Python sources as fallback
@@ -350,13 +386,17 @@ jobs:
 
         echo ""
         echo "Standalone executables:"
-        ls -lh artifacts/executables-x86_64/
-        ls -lh artifacts/executables-aarch64/
+        for d in artifacts/executables-*; do
+          echo "--- $d ---"
+          ls -lh "$d"
+        done
 
-    - name: Rename executables with architecture suffix
+    - name: Rename executables with platform/architecture suffix
       run: |
-        cp artifacts/executables-x86_64/xray-client xray-client-x86_64
-        cp artifacts/executables-aarch64/xray-client xray-client-aarch64
+        cp artifacts/executables-linux-x86_64/xray-client xray-client-linux-x86_64
+        cp artifacts/executables-linux-aarch64/xray-client xray-client-linux-aarch64
+        cp artifacts/executables-macos-x86_64/xray-client xray-client-macos-x86_64
+        cp artifacts/executables-macos-arm64/xray-client xray-client-macos-arm64
 
     - name: Generate release notes from git history
       id: release_notes
@@ -401,8 +441,10 @@ jobs:
         files: |
           xray-client-offline-x86_64.tar.gz
           xray-client-offline-aarch64.tar.gz
-          xray-client-x86_64
-          xray-client-aarch64
+          xray-client-linux-x86_64
+          xray-client-linux-aarch64
+          xray-client-macos-x86_64
+          xray-client-macos-arm64
         body: |
           ## Xray Client ${{ env.RELEASE_VERSION }}
 
@@ -410,11 +452,13 @@ jobs:
           ${{ steps.release_notes.outputs.RELEASE_NOTES }}
 
           ### 独立可执行文件（推荐）
-          下载对应架构的 `xray-client` 可直接运行，无需安装 Python 环境（已内置 TUI）。
-          - x86_64: `xray-client-x86_64`
-          - aarch64: `xray-client-aarch64`
+          下载对应平台/架构的 `xray-client` 可直接运行，无需安装 Python 环境（已内置 TUI）。
+          - Linux x86_64: `xray-client-linux-x86_64`
+          - Linux aarch64: `xray-client-linux-aarch64`
+          - macOS Intel (x86_64): `xray-client-macos-x86_64`
+          - macOS Apple Silicon (arm64): `xray-client-macos-arm64`
 
-          ### 离线安装包
+          ### 离线安装包（仅 Linux）
           - `xray-client-offline-x86_64.tar.gz` - x86_64 架构离线包
           - `xray-client-offline-aarch64.tar.gz` - ARM64 架构离线包
 
