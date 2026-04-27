@@ -58,16 +58,50 @@ get_working_mirror() {
     return 1
 }
 
+# SHA256 校验函数
+# 用法: verify_sha256 <file> <expected_hash>
+verify_sha256() {
+    local file="$1"
+    local expected="$2"
+    local actual
+
+    if [ -z "$expected" ]; then
+        return 0
+    fi
+
+    if ! command -v sha256sum &> /dev/null; then
+        echo -e "${YELLOW}警告: 未安装 sha256sum，跳过校验${NC}" >&2
+        return 0
+    fi
+
+    actual=$(sha256sum "$file" 2>/dev/null | awk '{print $1}')
+    if [ "$actual" = "$expected" ]; then
+        echo -e "${GREEN}✓ SHA256 校验通过${NC}" >&2
+        return 0
+    fi
+
+    echo -e "${RED}✗ SHA256 校验失败${NC}" >&2
+    echo -e "${RED}  期望: $expected${NC}" >&2
+    echo -e "${RED}  实际: $actual${NC}" >&2
+    return 1
+}
+
 # 带重试的下载函数
+# 用法: download_with_retry <url> <output> [expected_sha256]
 download_with_retry() {
     local url="$1"
     local output="$2"
+    local expected_sha="${3:-}"
     local max_retries=3
     local retry_count=0
-    
+
     while [ $retry_count -lt $max_retries ]; do
         if curl -fsSL --connect-timeout 15 --max-time 60 -o "$output" "$url" 2>/dev/null; then
-            return 0
+            if verify_sha256 "$output" "$expected_sha"; then
+                return 0
+            fi
+            # 校验失败时删除已下载文件，避免污染后续逻辑
+            rm -f "$output"
         fi
         retry_count=$((retry_count + 1))
         echo -e "${YELLOW}下载失败，第 $retry_count 次重试...${NC}"
@@ -77,35 +111,38 @@ download_with_retry() {
 }
 
 # 下载文件（自动选择镜像）
+# 用法: download_file <url> <output> [use_mirror=auto|no] [expected_sha256]
+# expected_sha256 留空时跳过校验
 download_file() {
     local url="$1"
     local output="$2"
     local use_mirror="${3:-auto}"
-    
+    local expected_sha="${4:-}"
+
     # 如果指定不使用镜像，直接下载
     if [ "$use_mirror" = "no" ]; then
-        download_with_retry "$url" "$output"
+        download_with_retry "$url" "$output" "$expected_sha"
         return $?
     fi
-    
+
     # 尝试直连
     if check_github; then
         echo "GitHub 可直连，直接下载..."
-        if download_with_retry "$url" "$output"; then
+        if download_with_retry "$url" "$output" "$expected_sha"; then
             return 0
         fi
     fi
-    
+
     # 尝试镜像
     local mirror
     mirror=$(get_working_mirror)
     if [ -n "$mirror" ]; then
         echo "使用镜像下载..."
-        if download_with_retry "${mirror}${url}" "$output"; then
+        if download_with_retry "${mirror}${url}" "$output" "$expected_sha"; then
             return 0
         fi
     fi
-    
+
     return 1
 }
 
@@ -244,8 +281,9 @@ else
     
     INSTALL_SCRIPT_URL="https://github.com/XTLS/Xray-install/raw/main/install-release.sh"
     INSTALL_SCRIPT_PATH="/tmp/install-release.sh"
-    
-    if download_file "$INSTALL_SCRIPT_URL" "$INSTALL_SCRIPT_PATH" "$NETWORK_MODE"; then
+
+    # 可通过 XRAY_INSTALL_SCRIPT_SHA256 环境变量固定上游脚本哈希
+    if download_file "$INSTALL_SCRIPT_URL" "$INSTALL_SCRIPT_PATH" "$NETWORK_MODE" "${XRAY_INSTALL_SCRIPT_SHA256:-}"; then
         chmod +x "$INSTALL_SCRIPT_PATH"
         echo "执行官方安装脚本..."
         bash "$INSTALL_SCRIPT_PATH" install --without-geodata
@@ -375,7 +413,8 @@ if [ "$HAS_EXECUTABLE" = true ]; then
 else
     # ---- 使用 Python 脚本 ----
     echo "正在下载 xray-client 脚本..."
-    if download_file "${SCRIPT_BASE_URL}/xray-client.py" "/usr/local/bin/xray-client" "$NETWORK_MODE"; then
+    # 可通过 XRAY_CLIENT_SHA256 环境变量固定脚本哈希
+    if download_file "${SCRIPT_BASE_URL}/xray-client.py" "/usr/local/bin/xray-client" "$NETWORK_MODE" "${XRAY_CLIENT_SHA256:-}"; then
         echo -e "${GREEN}✓ xray-client 脚本下载成功${NC}"
     else
         echo -e "${RED}下载 xray-client 脚本失败，使用本地备份...${NC}"

@@ -259,6 +259,24 @@ class XrayClient:
         except Exception:
             return None
 
+    @staticmethod
+    def _safe_int(value, default=0):
+        """容错地转换为 int，失败时返回 default。订阅源可能给字符串端口。"""
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _validate_node(node, required_fields):
+        """校验节点必填字段，缺失时返回 None。"""
+        for field in required_fields:
+            value = node.get(field)
+            if value is None or value == "" or value == 0:
+                logger.warning(f"节点 [{node.get('name', 'unnamed')}] 缺少必填字段: {field}")
+                return None
+        return node
+
     def parse_vmess(self, url):
         """解析 VMess 链接"""
         try:
@@ -269,23 +287,32 @@ class XrayClient:
 
             json_str = base64.b64decode(b64_data).decode("utf-8", errors="ignore")
             node = json.loads(json_str)
+            if not isinstance(node, dict):
+                logger.error("VMess 节点格式错误: 期望 JSON 对象")
+                return None
 
-            return {
-                "type": "vmess",
-                "name": node.get("ps", "unnamed"),
-                "server": node.get("add", ""),
-                "port": int(node.get("port", 0)),
-                "uuid": node.get("id", ""),
-                "alterId": int(node.get("aid", 0)),
-                "security": node.get("scy", "auto"),
-                "network": node.get("net", "tcp"),
-                "tls": node.get("tls", ""),
-                "sni": node.get("sni", ""),
-                "host": node.get("host", ""),
-                "path": node.get("path", ""),
-            }
-        except Exception as e:
+            return self._validate_node(
+                {
+                    "type": "vmess",
+                    "name": node.get("ps", "unnamed"),
+                    "server": node.get("add", ""),
+                    "port": self._safe_int(node.get("port", 0)),
+                    "uuid": node.get("id", ""),
+                    "alterId": self._safe_int(node.get("aid", 0)),
+                    "security": node.get("scy", "auto"),
+                    "network": node.get("net", "tcp"),
+                    "tls": node.get("tls", ""),
+                    "sni": node.get("sni", ""),
+                    "host": node.get("host", ""),
+                    "path": node.get("path", ""),
+                },
+                required_fields=("server", "port", "uuid"),
+            )
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
             logger.error(f"解析 VMess 失败: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"解析 VMess 出现意外错误: {e}")
             return None
 
     def parse_vless(self, url):
@@ -304,32 +331,42 @@ class XrayClient:
             else:
                 main_part, params = url, ""
 
+            if "@" not in main_part or ":" not in main_part:
+                logger.error("VLESS 链接缺少 user@host:port 部分")
+                return None
+
             uuid, rest = main_part.split("@", 1)
-            server, port = rest.rsplit(":", 1)
-            port = int(port)
+            server, port_str = rest.rsplit(":", 1)
+            port = self._safe_int(port_str, default=0)
 
             param_dict = urllib.parse.parse_qs(params)
 
-            return {
-                "type": "vless",
-                "name": name,
-                "server": server,
-                "port": port,
-                "uuid": uuid,
-                "encryption": param_dict.get("encryption", ["none"])[0],
-                "flow": param_dict.get("flow", [""])[0],
-                "security": param_dict.get("security", [""])[0],
-                "sni": param_dict.get("sni", [""])[0],
-                "fp": param_dict.get("fp", [""])[0],
-                "pbk": param_dict.get("pbk", [""])[0],
-                "sid": param_dict.get("sid", [""])[0],
-                "spx": param_dict.get("spx", [""])[0],
-                "net_type": param_dict.get("type", ["tcp"])[0],
-                "host": param_dict.get("host", [""])[0],
-                "path": urllib.parse.unquote(param_dict.get("path", [""])[0]),
-            }
-        except Exception as e:
+            return self._validate_node(
+                {
+                    "type": "vless",
+                    "name": name,
+                    "server": server,
+                    "port": port,
+                    "uuid": uuid,
+                    "encryption": param_dict.get("encryption", ["none"])[0],
+                    "flow": param_dict.get("flow", [""])[0],
+                    "security": param_dict.get("security", [""])[0],
+                    "sni": param_dict.get("sni", [""])[0],
+                    "fp": param_dict.get("fp", [""])[0],
+                    "pbk": param_dict.get("pbk", [""])[0],
+                    "sid": param_dict.get("sid", [""])[0],
+                    "spx": param_dict.get("spx", [""])[0],
+                    "net_type": param_dict.get("type", ["tcp"])[0],
+                    "host": param_dict.get("host", [""])[0],
+                    "path": urllib.parse.unquote(param_dict.get("path", [""])[0]),
+                },
+                required_fields=("server", "port", "uuid"),
+            )
+        except (ValueError, TypeError) as e:
             logger.error(f"解析 VLESS 失败: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"解析 VLESS 出现意外错误: {e}")
             return None
 
     def parse_ss(self, url):
@@ -349,24 +386,38 @@ class XrayClient:
                 if padding != 4:
                     url += "=" * padding
                 decoded = base64.b64decode(url).decode("utf-8", errors="ignore")
-                method_pass, server_port = decoded.split("@", 1)
-                method, password = method_pass.split(":", 1)
-                server, port = server_port.rsplit(":", 1)
+                payload = decoded
             else:
-                method_pass, server_port = url.split("@", 1)
-                method, password = method_pass.split(":", 1)
-                server, port = server_port.rsplit(":", 1)
+                payload = url
 
-            return {
-                "type": "shadowsocks",
-                "name": name,
-                "server": server,
-                "port": int(port),
-                "method": method,
-                "password": password,
-            }
-        except Exception as e:
+            if "@" not in payload or ":" not in payload:
+                logger.error("SS 链接缺少 method:password@host:port 部分")
+                return None
+
+            method_pass, server_port = payload.split("@", 1)
+            if ":" not in method_pass or ":" not in server_port:
+                logger.error("SS 链接 method/password 或 host/port 分隔符缺失")
+                return None
+
+            method, password = method_pass.split(":", 1)
+            server, port_str = server_port.rsplit(":", 1)
+
+            return self._validate_node(
+                {
+                    "type": "shadowsocks",
+                    "name": name,
+                    "server": server,
+                    "port": self._safe_int(port_str, default=0),
+                    "method": method,
+                    "password": password,
+                },
+                required_fields=("server", "port", "method", "password"),
+            )
+        except (ValueError, TypeError) as e:
             logger.error(f"解析 SS 失败: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"解析 SS 出现意外错误: {e}")
             return None
 
     def parse_trojan(self, url):
@@ -385,22 +436,32 @@ class XrayClient:
             else:
                 main_part, params = url, ""
 
+            if "@" not in main_part or ":" not in main_part:
+                logger.error("Trojan 链接缺少 password@host:port 部分")
+                return None
+
             password, rest = main_part.split("@", 1)
-            server, port = rest.rsplit(":", 1)
-            port = int(port)
+            server, port_str = rest.rsplit(":", 1)
+            port = self._safe_int(port_str, default=0)
 
             param_dict = urllib.parse.parse_qs(params)
 
-            return {
-                "type": "trojan",
-                "name": name,
-                "server": server,
-                "port": port,
-                "password": password,
-                "sni": param_dict.get("sni", [""])[0],
-            }
-        except Exception as e:
+            return self._validate_node(
+                {
+                    "type": "trojan",
+                    "name": name,
+                    "server": server,
+                    "port": port,
+                    "password": password,
+                    "sni": param_dict.get("sni", [""])[0],
+                },
+                required_fields=("server", "port", "password"),
+            )
+        except (ValueError, TypeError) as e:
             logger.error(f"解析 Trojan 失败: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"解析 Trojan 出现意外错误: {e}")
             return None
 
     def parse_clash(self, content):
@@ -433,28 +494,35 @@ class XrayClient:
 
     def convert_clash_proxy(self, proxy):
         """将 Clash proxy 转换为内部格式"""
+        if not isinstance(proxy, dict):
+            logger.warning("Clash proxy 不是字典对象，已跳过")
+            return None
+
         proxy_type = proxy.get("type", "").lower()
         name = proxy.get("name", "unnamed")
         server = proxy.get("server", "")
-        port = proxy.get("port", 0)
+        port = self._safe_int(proxy.get("port", 0))
 
         if proxy_type == "ss":
-            return {
-                "type": "shadowsocks",
-                "name": name,
-                "server": server,
-                "port": port,
-                "method": proxy.get("cipher", "aes-256-gcm"),
-                "password": proxy.get("password", ""),
-            }
+            return self._validate_node(
+                {
+                    "type": "shadowsocks",
+                    "name": name,
+                    "server": server,
+                    "port": port,
+                    "method": proxy.get("cipher", "aes-256-gcm"),
+                    "password": proxy.get("password", ""),
+                },
+                required_fields=("server", "port", "method", "password"),
+            )
         elif proxy_type == "vmess":
-            return {
+            return self._validate_node({
                 "type": "vmess",
                 "name": name,
                 "server": server,
                 "port": port,
                 "uuid": proxy.get("uuid", ""),
-                "alterId": proxy.get("alterId", 0),
+                "alterId": self._safe_int(proxy.get("alterId", 0)),
                 "security": proxy.get("cipher", "auto"),
                 "network": proxy.get("network", "tcp"),
                 "tls": "tls" if proxy.get("tls") else "",
@@ -465,30 +533,36 @@ class XrayClient:
                     else proxy.get("ws-opts", {}).get("headers", {}).get("Host", "")
                 ),
                 "path": proxy.get("ws-path", "") if "ws-path" in proxy else proxy.get("ws-opts", {}).get("path", ""),
-            }
+            }, required_fields=("server", "port", "uuid"))
         elif proxy_type == "trojan":
-            return {
-                "type": "trojan",
-                "name": name,
-                "server": server,
-                "port": port,
-                "password": proxy.get("password", ""),
-                "sni": proxy.get("sni", ""),
-            }
+            return self._validate_node(
+                {
+                    "type": "trojan",
+                    "name": name,
+                    "server": server,
+                    "port": port,
+                    "password": proxy.get("password", ""),
+                    "sni": proxy.get("sni", ""),
+                },
+                required_fields=("server", "port", "password"),
+            )
         elif proxy_type == "vless":
-            return {
-                "type": "vless",
-                "name": name,
-                "server": server,
-                "port": port,
-                "uuid": proxy.get("uuid", ""),
-                "encryption": proxy.get("cipher", "none"),
-                "flow": proxy.get("flow", ""),
-                "security": "tls" if proxy.get("tls") else "",
-                "sni": proxy.get("servername", ""),
-                "net_type": proxy.get("network", "tcp"),
-                "path": proxy.get("ws-opts", {}).get("path", ""),
-            }
+            return self._validate_node(
+                {
+                    "type": "vless",
+                    "name": name,
+                    "server": server,
+                    "port": port,
+                    "uuid": proxy.get("uuid", ""),
+                    "encryption": proxy.get("cipher", "none"),
+                    "flow": proxy.get("flow", ""),
+                    "security": "tls" if proxy.get("tls") else "",
+                    "sni": proxy.get("servername", ""),
+                    "net_type": proxy.get("network", "tcp"),
+                    "path": proxy.get("ws-opts", {}).get("path", ""),
+                },
+                required_fields=("server", "port", "uuid"),
+            )
         else:
             logger.warning(f"不支持的 Clash 协议: {proxy_type}")
             return None
@@ -604,7 +678,7 @@ class XrayClient:
         """测试所有节点延迟"""
         data = self.load_subscription_data()
         if not data or not data.get("nodes"):
-            print("没有可用的节点数据")
+            print("没有可用的节点数据", file=sys.stderr)
             return
 
         nodes = data["nodes"]
@@ -658,7 +732,7 @@ class XrayClient:
             self.generate_config()
             return True
         else:
-            print("\n没有可用的节点")
+            print("\n没有可用的节点", file=sys.stderr)
             return False
 
     def generate_xray_config(self, node):
@@ -892,8 +966,8 @@ class XrayClient:
             return False
 
         nodes = data["nodes"]
-        if node_index >= len(nodes):
-            logger.error(f"节点索引 {node_index} 超出范围")
+        if node_index < 0 or node_index >= len(nodes):
+            logger.error(f"节点索引 {node_index} 超出范围 (0-{len(nodes) - 1})")
             return False
 
         node = nodes[node_index]
@@ -984,7 +1058,7 @@ class XrayClient:
         """列出所有节点"""
         data = self.load_subscription_data()
         if not data or not data.get("nodes"):
-            print("\n没有可用的节点数据，请先更新订阅")
+            print("\n没有可用的节点数据，请先更新订阅", file=sys.stderr)
             return
 
         nodes = data["nodes"]
@@ -1009,12 +1083,12 @@ class XrayClient:
         """选择节点"""
         data = self.load_subscription_data()
         if not data or not data.get("nodes"):
-            print("没有可用的节点数据")
+            print("没有可用的节点数据", file=sys.stderr)
             return False
 
         nodes = data["nodes"]
         if index < 0 or index >= len(nodes):
-            print(f"节点索引 {index} 超出范围 (0-{len(nodes) - 1})")
+            print(f"节点索引 {index} 超出范围 (0-{len(nodes) - 1})", file=sys.stderr)
             return False
 
         self.selected_node = index
@@ -2032,7 +2106,8 @@ def main():
         if result.stdout.strip() == "200":
             print("代理连接成功! HTTP 状态码: 200")
         else:
-            print(f"代理连接失败，HTTP 状态码: {result.stdout.strip()}")
+            print(f"代理连接失败，HTTP 状态码: {result.stdout.strip()}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":

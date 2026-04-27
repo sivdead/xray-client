@@ -4,12 +4,12 @@ version = "0.1.0"
 description = "Lightweight Linux proxy client with JustMySocks subscription support"
 requires-python = ">=3.9"
 dependencies = [
-    "pyyaml",
+    "pyyaml>=6.0,<7.0",
 ]
 
 [project.optional-dependencies]
 build = [
-    "pyinstaller",
+    "pyinstaller>=6.0,<7.0",
 ]
 
 [tool.ruff]
