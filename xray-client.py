@@ -584,7 +584,7 @@ class XrayClient:
         return True
 
     def test_node_latency(self, node, timeout=5):
-        """测试节点延迟（TCP 连接测试）"""
+        """测试节点端口延迟（TCP 连接测试，不代表代理可用）"""
         try:
             start = time.time()
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -600,8 +600,8 @@ class XrayClient:
         except Exception as e:
             return {"node": node, "latency": -1, "ok": False, "error": str(e)}
 
-    def test_all_nodes(self, max_workers=10):
-        """测试所有节点延迟"""
+    def test_all_nodes(self, max_workers=10, timeout=5):
+        """测试所有节点 TCP 端口延迟"""
         data = self.load_subscription_data()
         if not data or not data.get("nodes"):
             print("没有可用的节点数据")
@@ -610,11 +610,11 @@ class XrayClient:
         nodes = data["nodes"]
         results = []
 
-        print(f"\n正在测试 {len(nodes)} 个节点...")
+        print(f"\n正在测试 {len(nodes)} 个节点的 TCP 端口延迟...")
         print("=" * 80)
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(self.test_node_latency, node): i for i, node in enumerate(nodes)}
+            futures = {executor.submit(self.test_node_latency, node, timeout): i for i, node in enumerate(nodes)}
 
             for future in as_completed(futures):
                 i = futures[future]
@@ -641,25 +641,77 @@ class XrayClient:
 
         return results
 
+    def test_proxy_connectivity(self, timeout=15):
+        """通过本地 HTTP 代理发起真实请求，验证当前 Xray 出站是否可用。"""
+        curl = shutil.which("curl")
+        if not curl:
+            return {"ok": False, "status": "", "error": "curl not found"}
+
+        try:
+            result = subprocess.run(
+                [
+                    curl,
+                    "-fsS",
+                    "-o",
+                    "/dev/null",
+                    "-w",
+                    "%{http_code}",
+                    "-x",
+                    f"http://127.0.0.1:{self.local_http_port}",
+                    "--connect-timeout",
+                    str(min(timeout, 10)),
+                    "--max-time",
+                    str(timeout),
+                    "https://www.gstatic.com/generate_204",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+                env=_clean_subprocess_env(),
+            )
+        except Exception as e:
+            return {"ok": False, "status": "", "error": str(e)}
+
+        status = result.stdout.strip()
+        return {
+            "ok": result.returncode == 0 and status in {"204", "200"},
+            "status": status,
+            "error": result.stderr.strip(),
+        }
+
     def auto_select_best_node(self):
-        """自动选择最佳节点"""
+        """自动选择最佳节点，并用真实代理请求验证候选节点。"""
         results = self.test_all_nodes()
-
-        # 找到延迟最低的正常节点
-        best = None
-        for idx, result in results:
-            if result["ok"]:
-                best = idx
-                break
-
-        if best is not None:
-            print(f"\n自动选择最佳节点: [{best}]")
-            self.select_node(best)
-            self.generate_config()
-            return True
-        else:
+        if not results:
             print("\n没有可用的节点")
             return False
+
+        original = self.selected_node
+        for idx, result in results:
+            if not result["ok"]:
+                continue
+
+            node = result["node"]
+            print(f"\n验证候选节点 [{idx}]: {node['name']}")
+            if not self.generate_config(idx):
+                continue
+            if not self.restart_xray():
+                continue
+
+            proxy_result = self.test_proxy_connectivity()
+            if proxy_result["ok"]:
+                print(f"真实代理请求成功，自动选择节点: [{idx}]")
+                self.select_node(idx)
+                return True
+
+            reason = proxy_result["error"] or f"HTTP 状态码: {proxy_result['status'] or '无'}"
+            print(f"候选节点 [{idx}] 代理请求失败: {reason}")
+
+        print("\n没有通过真实代理请求验证的节点，恢复原节点")
+        self.selected_node = original
+        self.generate_config(original)
+        self.restart_xray()
+        return False
 
     def generate_xray_config(self, node):
         """生成 Xray 配置文件"""
@@ -1966,7 +2018,7 @@ def main():
             print("\n节点已切换，运行 'xray-client apply' 或 'xray-client reload' 应用")
 
     elif args.command == "test":
-        client.test_all_nodes()
+        client.test_all_nodes(timeout=args.timeout)
 
     elif args.command == "auto-select":
         if client.auto_select_best_node():
