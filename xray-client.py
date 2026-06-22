@@ -1218,18 +1218,19 @@ class XrayClient:
         else:
             logger.warning("无法获取 Xray 进程 UID，透明代理可能出现回环，请确认 Xray 运行用户")
 
-        # 跳过私有地址和回环地址
-        private_ranges = [
+        # 跳过不应进入透明代理的保留地址、内网地址和 Tailscale/CGNAT 地址
+        bypass_ranges = [
             "0.0.0.0/8",
             "10.0.0.0/8",
             "127.0.0.0/8",
             "169.254.0.0/16",
             "172.16.0.0/12",
             "192.168.0.0/16",
+            "100.64.0.0/10",
             "224.0.0.0/4",
             "240.0.0.0/4",
         ]
-        for cidr in private_ranges:
+        for cidr in bypass_ranges:
             self._run_iptables("-t", "nat", "-A", IPTABLES_CHAIN, "-d", cidr, "-j", "RETURN")
 
         # 重定向 TCP 到透明代理端口
