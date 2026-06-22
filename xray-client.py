@@ -98,6 +98,7 @@ class XrayClient:
         self.selected_node = 0
         self.local_socks_port = 10808
         self.local_http_port = 10809
+        self.local_listen_host = "127.0.0.1"
         self.enable_udp = True
         self.github_mirror = ""
         self.hot_reload = True  # 启用热重载
@@ -187,6 +188,9 @@ class XrayClient:
             if "local" in config:
                 self.local_socks_port = config["local"].getint("socks_port", 10808)
                 self.local_http_port = config["local"].getint("http_port", 10809)
+                self.local_listen_host = config["local"].get("listen", config["local"].get("listen_host", "127.0.0.1"))
+                if not self.local_listen_host.strip():
+                    self.local_listen_host = "127.0.0.1"
                 self.enable_udp = config["local"].getboolean("udp", True)
                 self.hot_reload = config["local"].getboolean("hot_reload", True)
                 self.tun_mode = config["local"].getboolean("tun_mode", False)
@@ -725,7 +729,7 @@ class XrayClient:
                 {
                     "tag": "socks",
                     "port": self.local_socks_port,
-                    "listen": "127.0.0.1",
+                    "listen": self.local_listen_host,
                     "protocol": "socks",
                     "sniffing": {
                         "enabled": True,
@@ -734,13 +738,13 @@ class XrayClient:
                     "settings": {
                         "auth": "noauth",
                         "udp": self.enable_udp,
-                        "ip": "127.0.0.1",
+                        "ip": self.local_listen_host,
                     },
                 },
                 {
                     "tag": "http",
                     "port": self.local_http_port,
-                    "listen": "127.0.0.1",
+                    "listen": self.local_listen_host,
                     "protocol": "http",
                     "sniffing": {
                         "enabled": True,

@@ -161,6 +161,9 @@ socks_port = 10808
 # 本地 HTTP 代理端口
 http_port = 10809
 
+# 代理监听地址。改为 0.0.0.0 可允许局域网访问。
+listen = 127.0.0.1
+
 # 启用 UDP
 udp = true
 

@@ -159,6 +159,9 @@ socks_port = 10808
 # Local HTTP proxy port
 http_port = 10809
 
+# Proxy listen address. Use 0.0.0.0 to allow LAN access.
+listen = 127.0.0.1
+
 # Enable UDP
 udp = true
 
